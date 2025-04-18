@@ -1,0 +1,3 @@
+[submodule "sgl-disk/rocksdb"]
+	path = sgl-disk/rocksdb
+	url = https://github.com/facebook/rocksdb
