@@ -26,6 +26,7 @@ from functools import partial
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import torch
+from lmcache.integration.sglang.sglang_adapter import LMCacheConnector
 
 from sglang.srt.disaggregation.kv_events import (
     AllBlocksCleared,
@@ -36,13 +37,13 @@ from sglang.srt.disaggregation.kv_events import (
 from sglang.srt.managers.schedule_batch import global_server_args_dict
 from sglang.srt.mem_cache.base_prefix_cache import BasePrefixCache
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool, TokenToKVPoolAllocator
+from sglang.srt.configs.model_config import ModelConfig
 
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
 
 
 class TreeNode:
-
     counter = 0
 
     def __init__(self, id: Optional[int] = None):
@@ -103,6 +104,11 @@ class RadixCache(BasePrefixCache):
         page_size: int,
         disable: bool = False,
         enable_kv_cache_events: bool = False,
+        model_config: ModelConfig = None,
+        tp_size: int = 1,
+        rank: int = 0,
+        world_size: int = 1,
+        enable_lmcache_connector: bool = True,
     ):
         self.req_to_token_pool = req_to_token_pool
         self.token_to_kv_pool_allocator = token_to_kv_pool_allocator
@@ -124,6 +130,16 @@ class RadixCache(BasePrefixCache):
             self.get_child_key_fn = lambda key: tuple(key[:page_size])
         self.reset()
 
+        if self.token_to_kv_pool_allocator is not None and enable_lmcache_connector:
+            self.lmcache_connector = LMCacheConnector(
+                sgl_config=model_config,
+                tp_size=tp_size,
+                rank=rank,
+                world_size=world_size,
+                k_pool=self.token_to_kv_pool_allocator._kvcache.k_buffer,
+                v_pool=self.token_to_kv_pool_allocator._kvcache.v_buffer,
+            )
+
     ##### Public API #####
 
     def reset(self):
@@ -134,6 +150,8 @@ class RadixCache(BasePrefixCache):
         self.evictable_size_ = 0
         self.protected_size_ = 0
         self._record_all_cleared_event()
+        if hasattr(self, "lmcache_connector") and self.lmcache_connector is not None:
+            self.lmcache_connector.reset()
 
     def match_prefix(self, key: List[int], **kwargs) -> Tuple[torch.Tensor, int]:
         """Find the matching prefix from the radix tree.
@@ -167,6 +185,95 @@ class RadixCache(BasePrefixCache):
             value = torch.empty((0,), dtype=torch.int64, device=self.device)
         return value, last_node
 
+    def match_prefix_lmcache(
+        self, key: List[int], **kwargs
+    ) -> Tuple[torch.Tensor, int]:
+        """Find the matching prefix from the radix tree.
+        Args:
+            key: A list of token IDs to find a matching prefix.
+        Returns:
+            A tuple of a tensor of matching prefix token IDs and
+            the last node that contains the prefix values. Note that
+            this API can modify the internal state of the Radix tree.
+            The last node create a new child if the prefix is shorter
+            than the last node's value.
+        """
+        if self.disable or len(key) == 0:
+            return (
+                torch.empty(
+                    (0,),
+                    dtype=torch.int64,
+                    device=self.device,
+                ),
+                self.root_node,
+            )
+
+        if self.page_size != 1:
+            page_aligned_len = len(key) // self.page_size * self.page_size
+            key = key[:page_aligned_len]
+
+        value, last_node = self._match_prefix_helper(self.root_node, key)
+        if value:
+            value = torch.cat(value)
+        else:
+            value = torch.empty((0,), dtype=torch.int64, device=self.device)
+
+        if self.lmcache_connector is not None:
+            # Check the prefix is page-aligned
+            if len(value) % self.page_size != 0:
+                raise ValueError("The prefix is not page-aligned")
+
+            uncached_paged_aligned_len = len(key) - len(value)
+
+            if uncached_paged_aligned_len == 0:
+                return value, last_node
+
+            key_tokens = torch.tensor(key, device=self.device)
+
+            if (
+                self.token_to_kv_pool_allocator.available_size()
+                < uncached_paged_aligned_len
+            ):
+                self.evict(uncached_paged_aligned_len)
+
+            # Since the uncached tokens are page-aligned, we do not need to introduce kernel call
+            token_prealloc_indices = self.token_to_kv_pool_allocator.alloc(
+                uncached_paged_aligned_len
+            )
+            if token_prealloc_indices is None:
+                return value, last_node
+
+            num_retrieved_tokens = self.lmcache_connector.load_kv(
+                key_tokens,
+                token_prealloc_indices.detach().clone().to(torch.int64).to(self.device),
+                offset=len(value),
+            )
+
+            self.token_to_kv_pool_allocator.free(
+                token_prealloc_indices[num_retrieved_tokens:]
+            )
+            self.evictable_size_ += num_retrieved_tokens
+
+            # Get a new node for the retreived tokens
+            if num_retrieved_tokens > 0:
+                new_node = TreeNode()
+                new_node.key = key[len(value) : len(value) + num_retrieved_tokens]
+                new_node.value = token_prealloc_indices[:num_retrieved_tokens]
+                new_node.parent = last_node
+                last_node.children[
+                    self.get_child_key_fn(
+                        key[len(value) : len(value) + num_retrieved_tokens]
+                    )
+                ] = new_node
+                last_node = new_node
+                value = torch.cat(
+                    [value, token_prealloc_indices[:num_retrieved_tokens]]
+                )
+                self._record_store_event(last_node.parent)
+                self._record_store_event(last_node)
+
+        return value, last_node
+
     def insert(self, key: List, value=None):
         if self.disable:
             return 0
@@ -197,6 +304,15 @@ class RadixCache(BasePrefixCache):
         else:
             page_aligned_len = len(kv_indices)
             page_aligned_kv_indices = kv_indices.clone()
+
+        if self.lmcache_connector is not None:
+            self.lmcache_connector.store_kv(
+                torch.tensor(token_ids[:page_aligned_len], device=self.device),
+                page_aligned_kv_indices.detach()
+                .clone()
+                .to(torch.int64)
+                .to(self.device),
+            )
 
         # Radix Cache takes one ref in memory pool
         new_prefix_len = self.insert(
@@ -518,6 +634,10 @@ class RadixCache(BasePrefixCache):
         events = self.kv_event_queue
         self.kv_event_queue = []
         return events
+
+    def shutdown_engine(self):
+        if self.lmcache_connector is not None:
+            self.lmcache_connector.close()
 
 
 if __name__ == "__main__":

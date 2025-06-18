@@ -576,6 +576,11 @@ class Scheduler(
                     page_size=self.page_size,
                     disable=server_args.disable_radix_cache,
                     enable_kv_cache_events=self.enable_kv_cache_events,
+                    model_config=self.model_config,
+                    tp_size=self.tp_size,
+                    rank=self.tp_rank,
+                    # TODO: set proper world size, now assume it's the same as tp_size
+                    world_size=self.tp_size,
                 )
 
         self.decode_mem_cache_buf_multiplier = (
@@ -1321,6 +1326,7 @@ class Scheduler(
         memory_leak = available_size != (
             self.max_total_num_tokens
             if not self.enable_hierarchical_cache
+            and not self.tree_cache.lmcache_connector_enabled()
             else self.max_total_num_tokens - protected_size
         )
         if memory_leak:

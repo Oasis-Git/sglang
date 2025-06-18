@@ -656,9 +656,16 @@ class Req:
                     )
                 )
             else:
-                self.prefix_indices, self.last_node = tree_cache.match_prefix(
-                    rid=self.rid, key=self.adjust_max_prefix_ids()
-                )
+                if tree_cache.lmcache_connector_enabled():
+                    self.prefix_indices, self.last_node = (
+                        tree_cache.match_prefix_lmcache(
+                            rid=self.rid, key=self.adjust_max_prefix_ids()
+                        )
+                    )
+                else:
+                    self.prefix_indices, self.last_node = tree_cache.match_prefix(
+                        rid=self.rid, key=self.adjust_max_prefix_ids()
+                    )
         self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
 
     def adjust_max_prefix_ids(self):
