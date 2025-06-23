@@ -1,0 +1,29 @@
+Name: sglang
+
+# 2-serving-engines/
+Serving:
+  - SGLang:
+      modelURL: meta-llama/Llama-3.1-8B-Instruct
+
+      # You do NOT need to specify hf_token if you are using LMCacheGKE
+      hf_token: # TODO: FILL OUR YOUR HF_TOKEN
+      replicaCount: 1
+      numGPUs: 2 # number of GPUs per replica
+      numCPUs: 24 # number of CPUs per replica
+      requestMemory: "50Gi" # memory request per replica
+      shmSize: "20Gi" # shared memory size
+      cacheSize: "50Gi" # size of the HuggingFace cache volume
+      contextLength: 32768 # context length for the model
+      tensorParallelSize: 2 # tensor parallel size for model distribution across GPUs
+
+# 3-workloads/
+Workload:
+  # Multiple workloads can be specified and they will all be run.
+
+  ShareGPT:
+    - LIMIT: 1000
+      MIN_ROUNDS: 10
+      START_ROUND: 0
+      QPS: [0.5, 0.7, 1]
+
+
