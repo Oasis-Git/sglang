@@ -236,6 +236,9 @@ class ServerArgs:
 
     # For model weight update
     custom_weight_loader: Optional[List[str]] = None
+    
+    # For LMCache
+    enable_lmcache_connector: bool = False
 
     def __post_init__(self):
         # Expert parallelism
@@ -1588,6 +1591,12 @@ class ServerArgs:
             nargs="*",
             default=None,
             help="The custom dataloader which used to update the model. Should be set with a valid import path, such as my_package.weight_load_func",
+        )
+        # For LMCache
+        parser.add_argument(
+            "--enable-lmcache-connector",
+            action="store_true",
+            help="Enable the LMCache connector.",
         )
 
     @classmethod

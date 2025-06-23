@@ -581,6 +581,7 @@ class Scheduler(
                     rank=self.tp_rank,
                     # TODO: set proper world size, now assume it's the same as tp_size
                     world_size=self.tp_size,
+                    enable_lmcache_connector=server_args.enable_lmcache_connector,
                 )
 
         self.decode_mem_cache_buf_multiplier = (
