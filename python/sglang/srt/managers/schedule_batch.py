@@ -668,24 +668,6 @@ class Req:
             ) = tree_cache.match_prefix(
                 key=self.adjust_max_prefix_ids(),
             )
-            # tree cache is None if the prefix is not computed with tree cache.
-            if enable_hierarchical_cache:
-                self.prefix_indices, self.last_node, self.last_node_global = (
-                    tree_cache.match_prefix(
-                        key=self.adjust_max_prefix_ids(), include_evicted=True
-                    )
-                )
-            else:
-                if tree_cache.lmcache_connector_enabled():
-                    self.prefix_indices, self.last_node = (
-                        tree_cache.match_prefix_lmcache(
-                            rid=self.rid, key=self.adjust_max_prefix_ids()
-                        )
-                    )
-                else:
-                    self.prefix_indices, self.last_node = tree_cache.match_prefix(
-                        rid=self.rid, key=self.adjust_max_prefix_ids()
-                    )
         self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
 
     def adjust_max_prefix_ids(self):
