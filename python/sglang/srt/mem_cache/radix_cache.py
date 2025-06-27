@@ -39,9 +39,6 @@ from sglang.srt.disaggregation.kv_events import (
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.base_prefix_cache import BasePrefixCache, MatchResult
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
-from sglang.srt.managers.schedule_batch import global_server_args_dict
-from sglang.srt.mem_cache.base_prefix_cache import BasePrefixCache
-from sglang.srt.mem_cache.memory_pool import ReqToTokenPool, TokenToKVPoolAllocator
 from sglang.srt.configs.model_config import ModelConfig
 
 if TYPE_CHECKING:
