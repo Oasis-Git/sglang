@@ -1,7 +1,7 @@
 SCRIPT_DIR="" # TODO: FILL OUR YOUR PATH
 PROJECT_ROOT="" # TODO: FILL OUR YOUR PATH
 
-MODEL="Qwen/Qwen2.5-14B-Instruct"
+MODEL="Qwen/Qwen3-14B-Instruct"
 BASE_URL="http://localhost:30000"
 KEY="sglang"
 
@@ -37,7 +37,7 @@ collect_pod_logs() {
     echo "📝 Collecting pod logs for baseline: $baseline, workload: $workload, QPS: $qps"
 
     # Create artifact directory structure
-    LOGS_DIR="$PROJECT_ROOT/4-latest-results/$NAME/pod-logs"
+    LOGS_DIR="$PROJECT_ROOT/$NAME/pod-logs"
     mkdir -p "$LOGS_DIR"
 
     # Get all pod names
@@ -129,7 +129,7 @@ for qps in "${QPS_VALUES[@]}"; do
     # Change to project root before running summarize.py
     cd "$PROJECT_ROOT"
 
-    python3 "4-latest-results/post-processing/summarize.py" \
+    python3 "summarize.py" \
         "4-latest-results/${KEY}_synthetic_output_${qps}.csv" \
         NAME="$NAME" \
         KEY="$KEY" \
