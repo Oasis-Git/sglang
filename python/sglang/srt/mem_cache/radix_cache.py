@@ -194,44 +194,8 @@ class RadixCache(BasePrefixCache):
             value = torch.cat(value)
         else:
             value = torch.empty((0,), dtype=torch.int64, device=self.device)
-        return MatchResult(
-            device_indices=value,
-            last_device_node=last_node,
-            last_host_node=last_node,
-        )
 
-    def match_prefix_lmcache(self, key: List[int], **kwargs) -> Tuple[torch.Tensor, int]:
-        """Find the matching prefix from the radix tree.
-        Args:
-            key: A list of token IDs to find a matching prefix.
-        Returns:
-            A tuple of a tensor of matching prefix token IDs and
-            the last node that contains the prefix values. Note that
-            this API can modify the internal state of the Radix tree.
-            The last node create a new child if the prefix is shorter
-            than the last node's value.
-        """
-        if self.disable or len(key) == 0:
-            return (
-                torch.empty(
-                    (0,),
-                    dtype=torch.int64,
-                    device=self.device,
-                ),
-                self.root_node,
-            )
-
-        if self.page_size != 1:
-            page_aligned_len = len(key) // self.page_size * self.page_size
-            key = key[:page_aligned_len]
-
-        value, last_node = self._match_prefix_helper(self.root_node, key)
-        if value:
-            value = torch.cat(value)
-        else:
-            value = torch.empty((0,), dtype=torch.int64, device=self.device)
-        
-        if self.lmcache_connector is not None:
+        if self.lmcache_connector_enabled():
             # Check the prefix is page-aligned
             if len(value) % self.page_size != 0:
                 raise ValueError("The prefix is not page-aligned")
@@ -240,7 +204,11 @@ class RadixCache(BasePrefixCache):
             chunk_size = self.lmcache_connector.chunk_size()
             
             if uncached_paged_aligned_len == 0:
-                return value, last_node
+                return MatchResult(
+                    device_indices=value,
+                    last_device_node=last_node,
+                    last_host_node=last_node,
+                )
             
             if len(value) % chunk_size != 0:
                 prefix_padding_len = len(value) % chunk_size
@@ -255,7 +223,11 @@ class RadixCache(BasePrefixCache):
             # Since the uncached tokens are page-aligned, we do not need to introduce kernel call
             token_prealloc_indices = self.token_to_kv_pool_allocator.alloc(uncached_paged_aligned_len)
             if token_prealloc_indices is None:
-                raise ValueError("Failed to allocate token prealloc indices")
+                return MatchResult(
+                    device_indices=value,
+                    last_device_node=last_node,
+                    last_host_node=last_node,
+                )
             
             slop_mapping = torch.cat([torch.tensor([-1] * prefix_padding_len, dtype=torch.int64, device=self.device), 
                                       token_prealloc_indices.detach().clone().to(torch.int64).to(self.device)])
@@ -283,8 +255,12 @@ class RadixCache(BasePrefixCache):
                 self.evictable_size_ += (num_retrieved_tokens - prefix_padding_len)
                 self._record_store_event(last_node.parent)
                 self._record_store_event(last_node)
-            
-        return value, last_node
+
+        return MatchResult(
+            device_indices=value,
+            last_device_node=last_node,
+            last_host_node=last_node,
+        )
 
     def insert(self, key: List, value=None):
         if self.disable:
@@ -331,7 +307,7 @@ class RadixCache(BasePrefixCache):
         
         # Store the KV cache to LMCache
         if self.lmcache_connector_enabled():
-            kv_indices_storage, last_node = self.match_prefix(token_ids[:page_aligned_len])
+            kv_indices_storage, last_node, _, _ = self.match_prefix(token_ids[:page_aligned_len])
             if len(kv_indices_storage) != len(token_ids[:page_aligned_len]):
                 raise ValueError("The KV cache is not page-aligned")
             
