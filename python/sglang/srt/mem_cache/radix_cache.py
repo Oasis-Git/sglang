@@ -146,6 +146,8 @@ class RadixCache(BasePrefixCache):
             self.shutdown_event = threading.Event()
             self.writer_thread = threading.Thread(target=self._lmcache_writer_worker)
             self.writer_thread.start()
+        else:
+            self.lmcache_connector = None
 
     ##### Public API #####
 
@@ -459,6 +461,14 @@ class RadixCache(BasePrefixCache):
                 continue
             except Exception as e:
                 logger.error(f"Error in LMCache writer thread: {e}", exc_info=True)
+
+    def lmcache_prefetch(
+        self,
+        tokens: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ):
+        if self.lmcache_connector:
+            self.lmcache_connector.prefetch(tokens, mask)
 
     def _match_prefix_helper(self, node: TreeNode, key: List):
         node.last_access_time = time.monotonic()
