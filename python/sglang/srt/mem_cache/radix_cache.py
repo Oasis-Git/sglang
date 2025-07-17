@@ -293,6 +293,12 @@ class RadixCache(BasePrefixCache):
             page_aligned_len = len(kv_indices)
             page_aligned_kv_indices = kv_indices.clone()
 
+        if self.lmcache_connector_enabled():
+            self.lmcache_connector.store_kv(
+                torch.tensor(token_ids[:page_aligned_len], device=self.device),
+                page_aligned_kv_indices.detach().clone().to(torch.int64).to(self.device),
+            )
+
         # Radix Cache takes one ref in memory pool
         new_prefix_len = self.insert(
             token_ids[:page_aligned_len], page_aligned_kv_indices
@@ -306,13 +312,13 @@ class RadixCache(BasePrefixCache):
         self.dec_lock_ref(req.last_node)
         
         # Store the KV cache to LMCache
-        if self.lmcache_connector_enabled():
-            kv_indices_storage, last_node, _, _ = self.match_prefix(token_ids[:page_aligned_len])
-            if len(kv_indices_storage) != len(token_ids[:page_aligned_len]):
-                raise ValueError("The KV cache is not page-aligned")
+        # if self.lmcache_connector_enabled():
+        #     kv_indices_storage, last_node, _, _ = self.match_prefix(token_ids[:page_aligned_len])
+        #     if len(kv_indices_storage) != len(token_ids[:page_aligned_len]):
+        #         raise ValueError("The KV cache is not page-aligned")
             
-            self.inc_lock_ref(last_node)
-            self.writer_queue.put((token_ids[:page_aligned_len], kv_indices_storage, last_node))
+        #     self.inc_lock_ref(last_node)
+        #     self.writer_queue.put((token_ids[:page_aligned_len], kv_indices_storage, last_node))
 
 
     def cache_unfinished_req(self, req: Req):
