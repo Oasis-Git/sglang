@@ -618,6 +618,11 @@ class Scheduler(
                 )
             )
         )
+        self.enable_lmcache_prefetch = (
+            server_args.enable_lmcache_prefetch
+            and hasattr(self.tree_cache, "lmcache_connector")
+            and (self.tree_cache.lmcache_connector is not None)
+        )
 
     def init_profier(self):
         self.torch_profiler = None
@@ -1217,6 +1222,8 @@ class Scheduler(
             self.disagg_decode_prealloc_queue.add(req)
         else:
             self.waiting_queue.append(req)
+        if self.enable_lmcache_prefetch:
+            self.tree_cache.lmcache_prefetch(req.origin_input_ids)
 
     def _extend_requests_to_queue(self, reqs: List[Req], is_retracted: bool = False):
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
@@ -1408,10 +1415,14 @@ class Scheduler(
             available_token_size = self.token_to_kv_pool_allocator.available_size()
         available_size = available_token_size + self.tree_cache.evictable_size()
         protected_size = self.tree_cache.protected_size()
+        lmcache_connector_enabled = (
+            hasattr(self.tree_cache, "lmcache_connector_enabled")
+            and self.tree_cache.lmcache_connector_enabled()
+        )
         memory_leak = available_size != (
             self.max_total_num_tokens
             if not self.enable_hierarchical_cache
-            and not self.tree_cache.lmcache_connector_enabled()
+            and not lmcache_connector_enabled
             else self.max_total_num_tokens - protected_size
         )
         if memory_leak:

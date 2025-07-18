@@ -245,6 +245,7 @@ class ServerArgs:
     
     # For LMCache
     enable_lmcache_connector: bool = False
+    enable_lmcache_prefetch: bool = False
 
     def __post_init__(self):
         # Expert parallelism
@@ -1637,6 +1638,11 @@ class ServerArgs:
             "--enable-lmcache-connector",
             action="store_true",
             help="Enable the LMCache connector.",
+        )
+        parser.add_argument(
+            "--enable-lmcache-prefetch",
+            action="store_true",
+            help="Enable the LMCache prefetch.",
         )
 
     @classmethod
