@@ -160,15 +160,7 @@ class LMCRadixCache(BasePrefixCache):
             self.key_match_fn = partial(_key_match_paged, page_size=page_size)
             self.get_child_key_fn = lambda key: tuple(key[:page_size])
 
-        # self.lmcache_connector = LMCacheLayerwiseConnector(
-        #     sgl_config=model_config,
-        #     tp_size=tp_size,
-        #     rank=rank,
-        #     k_pool=self.token_to_kv_pool_allocator._kvcache.k_buffer,
-        #     v_pool=self.token_to_kv_pool_allocator._kvcache.v_buffer,
-        # )
-
-        self.lmcache_connector = LMCacheLayerwiseConnector(
+        self.lmcache_connector = LMCacheConnector(
             sgl_config=model_config,
             tp_size=tp_size,
             rank=rank,
@@ -176,26 +168,6 @@ class LMCRadixCache(BasePrefixCache):
             v_pool=self.token_to_kv_pool_allocator._kvcache.v_buffer,
         )
 
-        self.load_stream = torch.cuda.Stream()
-        self.store_stream = torch.cuda.Stream()
-
-        self.load_queue = Queue()
-        self.store_queue = Queue()
-
-        self.stop_event = threading.Event()
-        self.load_cache_event = threading.Event()
-
-        self.load_thread = threading.Thread(
-            target=self._load_thread_func, daemon=True
-        )
-        self.store_thread = threading.Thread(
-            target=self._store_thread_func, daemon=True
-        )
-        self.load_thread.start()
-        self.store_thread.start()
-
-        self.layer_done_counter = LayerDoneCounter(model_config.num_hidden_layers)
-        self.token_to_kv_pool_allocator.get_kvcache().register_layer_transfer_counter(self.layer_done_counter)
         self.reset()
     
     ##### Public API #####
@@ -208,23 +180,6 @@ class LMCRadixCache(BasePrefixCache):
         self.evictable_size_ = 0
         self.protected_size_ = 0
         self._record_all_cleared_event()
-
-        # For LMCache
-        self.stop_event.set()
-        self.load_thread.join()
-        self.store_thread.join()
-        self.load_queue.queue.clear()
-        self.store_queue.queue.clear()
-
-        self.load_thread = threading.Thread(
-            target=self._load_thread_func, daemon=True
-        )
-        self.store_thread = threading.Thread(
-            target=self._store_thread_func, daemon=True
-        )
-        self.stop_event.clear()
-        self.load_thread.start()
-        self.store_thread.start()
 
     def match_prefix(self, key: List[int], **kwargs) -> MatchResult:
         """Find the matching prefix from the radix tree.
@@ -285,28 +240,13 @@ class LMCRadixCache(BasePrefixCache):
         slop_mapping = torch.cat([torch.tensor([-1] * prefix_padding_len, dtype=torch.int64, device=self.device), 
             token_prealloc_indices.detach().clone().to(torch.int64).to(self.device)])
         
-        num_retrieved_tokens = self.lmcache_connector.start_load_kv(
+        num_retrieved_tokens = self.lmcache_connector.load_kv(
             LoadMetadata(
                 token_ids=key,
                 slot_mapping=slop_mapping,
                 offset=len(value) - prefix_padding_len,
             )
         )
-        # import time
-        # start_time = time.time()
-        # num_retrieved_tokens = self.lmcache_connector.load_kv(
-        #     LoadMetadata(
-        #         token_ids=key,
-        #         slot_mapping=slop_mapping,
-        #         offset=len(value) - prefix_padding_len,
-        #     )
-        # )
-        # print(f"Line 304: num_retrieved_tokens: {num_retrieved_tokens}")
-        # current_stream = torch.cuda.current_stream()
-        # current_stream.synchronize()
-        # end_time = time.time()
-        # print(f"Line 308: Time taken: {end_time - start_time}")
-        # logger.info(f"num_retrieved_tokens: {num_retrieved_tokens}")
         
         if num_retrieved_tokens > 0:
             self.token_to_kv_pool_allocator.free(token_prealloc_indices[(num_retrieved_tokens - prefix_padding_len):])
@@ -385,16 +325,6 @@ class LMCRadixCache(BasePrefixCache):
         # Remove req slot release the cache lock
         self.req_to_token_pool.free(req.req_pool_idx)
         self.dec_lock_ref(req.last_node)
-
-        # Store to LMCache
-        # self.inc_lock_ref(req.last_node)
-        # store_metadata = StoreMetadata(
-        #     last_node=req.last_node,
-        #     token_ids=token_ids,
-        #     kv_indices=kv_indices,
-        #     offset=0,
-        # )
-        # self.store_queue.put(store_metadata)
 
     def cache_unfinished_req(self, req: Req):
         """Cache request when it is unfinished."""
