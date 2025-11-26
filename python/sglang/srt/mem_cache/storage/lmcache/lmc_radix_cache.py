@@ -211,7 +211,7 @@ class LMCRadixCache(RadixCache):
         if not is_insert:
             return
 
-        kv_committed_len = req.pop_committed_kv_cache()
+        kv_committed_len = len(req.origin_input_ids) + max(len(req.output_ids) - 1, 0)
         token_ids = (req.origin_input_ids + req.output_ids)[:kv_committed_len]
         kv_indices = self.req_to_token_pool.req_to_token[
             req.req_pool_idx, :kv_committed_len
@@ -254,27 +254,3 @@ class LMCRadixCache(RadixCache):
             )
         except Exception:  # pragma: no cover
             pass
-
-
-if __name__ == "__main__":
-    from sglang.srt.mem_cache.cache_init_params import CacheInitParams
-
-    params = CacheInitParams(
-        req_to_token_pool=None,
-        token_to_kv_pool_allocator=None,
-        page_size=1,
-        disable=False,
-        enable_kv_cache_events=False,
-    )
-    cache = LMCRadixCache(
-        params=params,
-        model_config=None,
-        tp_size=1,
-        rank=0,
-        tp_group=None,
-    )
-    cache.insert(RadixKey([1, 2, 3]), torch.tensor([10, 11, 12], dtype=torch.int64))
-    cache.insert(
-        RadixKey([1, 2, 3, 4]), torch.tensor([10, 11, 12, 13], dtype=torch.int64)
-    )
-    cache.pretty_print()
