@@ -965,6 +965,9 @@ class ServerArgs:
         # 14. PD disaggregation
         if self.disaggregation_mode != "null":
             self.disable_piecewise_cuda_graph = True
+        # 15. Symmetric memory (torch.cuda.use_mem_pool is untraceable by dynamo)
+        if self.enable_symm_mem:
+            self.disable_piecewise_cuda_graph = True
 
     def _handle_gpu_memory_settings(self, gpu_mem):
         """
@@ -4679,6 +4682,11 @@ class ServerArgs:
             "--disable-piecewise-cuda-graph",
             action="store_true",
             help="Disable piecewise cuda graph for extend/prefill.",
+        )
+        parser.add_argument(
+            "--enable-piecewise-cuda-graph",
+            action=DeprecatedAction,
+            help="Deprecated: Piecewise cuda graph is enabled by default. Use --enforce-piecewise-cuda-graph to skip auto-disable conditions.",
         )
         parser.add_argument(
             "--enforce-piecewise-cuda-graph",

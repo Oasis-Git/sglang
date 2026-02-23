@@ -411,6 +411,7 @@ class PiecewiseCudaGraphRunner:
 
     def can_run(self, forward_batch: ForwardBatch):
         # Disable piecewise cuda graph for input embeddings
+        # TODO(yuwei): fix it
         if forward_batch.input_embeds is not None:
             return False
         num_tokens = len(forward_batch.input_ids)
