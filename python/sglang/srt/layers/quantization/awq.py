@@ -60,10 +60,13 @@ if _is_npu:
     import torch_npu
 
 if _is_cuda:
-    from sgl_kernel import awq_dequantize, awq_marlin_moe_repack, awq_marlin_repack
+    from sglang.jit_kernel.awq_dequantize import awq_dequantize
+    from sglang.jit_kernel.awq_marlin_repack import (
+        awq_marlin_moe_repack,
+        awq_marlin_repack,
+    )
     from sglang.srt.utils.custom_op import register_custom_op_from_extern
 
-    awq_dequantize.__annotations__["return"] = torch.Tensor
     awq_dequantize = register_custom_op_from_extern(
         awq_dequantize,
         fake_impl=lambda qweight, scales, qzeros: qweight.new_empty(

@@ -818,18 +818,6 @@ class ServerArgs:
             )
             return
 
-        # Backward compat: in PD prefill, legacy "round_robin" means `bootstrap_room` routing.
-        if (
-            self.disaggregation_mode == "prefill"
-            and self.load_balance_method == "round_robin"
-        ):
-            logger.warning(
-                "In PD-disaggregation prefill mode, the 'round_robin' load balancing method "
-                "means `bootstrap_room` routing (use 'follow_bootstrap_room' instead). "
-                "Falling back to 'follow_bootstrap_room' for backward compatibility."
-            )
-            self.load_balance_method = "follow_bootstrap_room"
-
     def _handle_deprecated_args(self):
         # Handle deprecated tool call parsers
         deprecated_tool_call_parsers = {"qwen25": "qwen", "glm45": "glm"}
@@ -1926,6 +1914,13 @@ class ServerArgs:
                 self.speculative_algorithm is None
             ), "Speculative decoding is currently not supported with Flex Attention backend"
 
+        # Encoder-decoder models (e.g., Whisper)
+        if model_config.is_encoder_decoder:
+            logger.warning(
+                "Cuda graph is disabled for encoder-decoder models (e.g., Whisper)"
+            )
+            self.disable_cuda_graph = True
+
         # Major NVIDIA platforms backends
         if (
             self.attention_backend == "flashmla"
@@ -2307,17 +2302,15 @@ class ServerArgs:
 
         if self.moe_a2a_backend == "mori":
             self.ep_size = self.tp_size
+            self.deepep_mode = "normal"
+            logger.warning("auto set deepep_mode=`normal` for MORI EP")
             logger.warning(
                 f"MoRI MoE is enabled. The expert parallel size is adjusted to be the same as the tensor parallel size[{self.tp_size}]."
             )
 
-            # Check chunked prefill for mori
-            # Skip validation if chunked prefill is disabled (i.e., size <= 0).
-            # Skip validation if disaggregation mode is decode.
-            if self.chunked_prefill_size > 0 and self.disaggregation_mode != "decode":
-                assert (self.chunked_prefill_size) <= get_int_env_var(
-                    "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", 4096
-                ), "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK (default 4096) must be larger or equal to chunked_prefill_size"
+            assert (self.chunked_prefill_size) <= get_int_env_var(
+                "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK", 4096
+            ), "SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK (default 4096) must be larger or equal to chunked_prefill_size"
 
     def _handle_eplb_and_dispatch(self):
         if self.enable_eplb and (self.expert_distribution_recorder_mode is None):
