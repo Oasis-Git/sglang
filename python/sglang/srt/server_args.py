@@ -1104,8 +1104,12 @@ class ServerArgs:
 
             # For piecewise cuda graphs
             if not self.disable_piecewise_cuda_graph:
-                # Only calculate the memory overhead for Non-Torch Memory use since the Torch Memory can be reused with Cuda Graph Capture
-                reserved_mem += len(self.piecewise_cuda_graph_tokens) * 8
+                if not self.use_mla_backend():
+                    # Only calculate the memory overhead for Non-Torch Memory use since the Torch Memory can be reused with Cuda Graph Capture
+                    reserved_mem += len(self.piecewise_cuda_graph_tokens) * 8
+                else:
+                    # For MLA backend the memory overhead is much higher than expected with fa3
+                    reserved_mem += 1.5 * 1024
 
             if gpu_mem is not None and gpu_mem > 60 * 1024:
                 reserved_mem = max(reserved_mem, 10 * 1024)
