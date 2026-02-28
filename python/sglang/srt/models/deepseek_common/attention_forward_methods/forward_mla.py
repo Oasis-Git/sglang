@@ -57,6 +57,7 @@ if _is_cuda:
         _bmm_fp8_op(A, B, out, A_scale, B_scale)
         return out
 
+
 if _use_aiter:
     from aiter.ops.triton.batched_gemm_a8w8_a_per_token_group_prequant_w_per_batched_tensor_quant import (
         batched_gemm_a8w8_a_per_token_group_prequant_w_per_batched_tensor_quant,
