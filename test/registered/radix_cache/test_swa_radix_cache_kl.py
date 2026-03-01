@@ -39,6 +39,7 @@ class TestSWARadixCacheKL(CustomTestCase):
                 "1",
                 "--mem-fraction-static",
                 "0.70",
+                "--disable-piecewise-cuda-graph",
             ],
         )
 
