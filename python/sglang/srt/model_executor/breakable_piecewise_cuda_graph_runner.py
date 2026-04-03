@@ -58,11 +58,13 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardMode,
     PPProxyTensors,
 )
+from sglang.srt.model_executor.cuda_graph_runner import (
+    get_global_graph_memory_pool,
+    set_global_graph_memory_pool,
+)
 from sglang.srt.model_executor.piecewise_cuda_graph_runner import (
     PrefillInputBuffers,
     freeze_gc,
-    get_global_graph_memory_pool,
-    set_global_graph_memory_pool,
 )
 from sglang.srt.utils import get_available_gpu_memory, is_npu, log_info_on_rank0
 
