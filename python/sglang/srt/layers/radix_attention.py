@@ -116,19 +116,53 @@ class RadixAttention(nn.Module):
                 k = k.view(-1, self.tp_k_head_num, self.v_head_dim)
 
         if forward_batch.forward_mode.is_extend() and get_forward_context() is not None:
-            if self.qk_head_dim != self.v_head_dim:
-                output = q.new_empty((q.shape[0], self.tp_q_head_num * self.v_head_dim))
-            else:
-                output = torch.empty_like(q)
             if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
-                breakable_unified_attention_with_output(
-                    q, k, v, output, save_kv_cache, self.layer_id, **kwargs
+                from sglang.srt.model_executor.breakable_piecewise_cuda_graph_runner import (
+                    get_bridge_buffers,
                 )
+
+                bridges = get_bridge_buffers()
+                if bridges is not None:
+                    n = q.shape[0]
+                    # Copy to pre-allocated bridge buffers (inside graph segment).
+                    # These copies are captured in the graph. The originals become
+                    # graph-private after del → freed → memory reusable by next segment.
+                    bridges.q[:n].copy_(q)
+                    bridges.k[:n].copy_(k)
+                    bridges.v[:n].copy_(v)
+                    output = bridges.output[:n]
+                    del q, k, v  # release refs so originals can be freed in this segment
+                    breakable_unified_attention_with_output(
+                        bridges.q[:n],
+                        bridges.k[:n],
+                        bridges.v[:n],
+                        output,
+                        save_kv_cache,
+                        self.layer_id,
+                        **kwargs,
+                    )
+                    return output
+                else:
+                    output = (
+                        q.new_empty((q.shape[0], self.tp_q_head_num * self.v_head_dim))
+                        if self.qk_head_dim != self.v_head_dim
+                        else torch.empty_like(q)
+                    )
+                    breakable_unified_attention_with_output(
+                        q, k, v, output, save_kv_cache, self.layer_id, **kwargs
+                    )
+                    return output
             else:
+                if self.qk_head_dim != self.v_head_dim:
+                    output = q.new_empty(
+                        (q.shape[0], self.tp_q_head_num * self.v_head_dim)
+                    )
+                else:
+                    output = torch.empty_like(q)
                 unified_attention_with_output(
                     q, k, v, output, save_kv_cache, self.layer_id, **kwargs
                 )
-            return output
+                return output
         else:
             return forward_batch.attn_backend.forward(
                 q,

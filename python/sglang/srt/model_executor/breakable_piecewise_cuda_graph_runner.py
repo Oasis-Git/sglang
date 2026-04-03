@@ -66,6 +66,40 @@ from sglang.srt.model_executor.piecewise_cuda_graph_runner import (
     PrefillInputBuffers,
     freeze_gc,
 )
+
+# Bridge buffers for reducing graph-owned persistent memory at break points.
+# Pre-allocated OUTSIDE graph capture so they're not graph-owned.
+# Reused across all layers (sequential execution) and all token sizes.
+_bridge_buffers = None
+
+
+def get_bridge_buffers():
+    return _bridge_buffers
+
+
+def set_bridge_buffers(buffers):
+    global _bridge_buffers
+    _bridge_buffers = buffers
+
+
+class BridgeBuffers:
+    """Pre-allocated tensors for q, k, v, output at graph break points.
+
+    During graph capture, the model copies q/k/v into these buffers before
+    the graph break. This makes the original tensors graph-private (freeable),
+    while the bridge buffers persist at fixed addresses outside the graph.
+    """
+
+    def __init__(self, max_tokens: int, attention_layer, device, dtype):
+        q_dim = attention_layer.tp_q_head_num * attention_layer.qk_head_dim
+        k_dim = attention_layer.tp_k_head_num * attention_layer.qk_head_dim
+        v_dim = attention_layer.tp_v_head_num * attention_layer.v_head_dim
+        out_dim = attention_layer.tp_q_head_num * attention_layer.v_head_dim
+
+        self.q = torch.empty((max_tokens, q_dim), dtype=dtype, device=device)
+        self.k = torch.empty((max_tokens, k_dim), dtype=dtype, device=device)
+        self.v = torch.empty((max_tokens, v_dim), dtype=dtype, device=device)
+        self.output = torch.empty((max_tokens, out_dim), dtype=dtype, device=device)
 from sglang.srt.utils import get_available_gpu_memory, is_npu, log_info_on_rank0
 
 logger = logging.getLogger(__name__)
@@ -140,6 +174,15 @@ class BreakablePiecewiseCudaGraphRunner:
             mrope_positions=mrope_positions,
         )
         self.buffers.share_buffers()
+
+        # Bridge buffers — one set, reused across all layers and token sizes.
+        # Allocated before capture so they're NOT graph-owned.
+        attn_layer_0 = self.attention_layers[0]
+        set_bridge_buffers(
+            BridgeBuffers(
+                self.max_num_tokens, attn_layer_0, self.device, model_runner.dtype
+            )
+        )
 
         # Graph storage
         self.graphs = {}
@@ -269,9 +312,18 @@ class BreakablePiecewiseCudaGraphRunner:
                         f"[Breakable PCG] Capturing ({num_tokens=} {avail_mem=:.2f} GB)"
                     )
 
+                mem_before = torch.cuda.memory_allocated(self.device) / 1024**3
                 graph, output = self._capture_one(num_tokens, pool, stream)
                 self.graphs[num_tokens] = graph
                 self.output_buffers[num_tokens] = output
+                mem_after = torch.cuda.memory_allocated(self.device) / 1024**3
+                logger.info(
+                    f"[Breakable PCG] num_tokens={num_tokens}: "
+                    f"segments={len(graph._segments)}, "
+                    f"breaks={len(graph._break_fns)}, "
+                    f"mem_delta={mem_after - mem_before:.3f} GB, "
+                    f"mem_total={mem_after:.3f} GB"
+                )
 
     def _capture_one(self, num_tokens: int, pool, stream):
         """Capture a breakable CUDA graph for one token size."""
