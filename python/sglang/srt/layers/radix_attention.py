@@ -127,15 +127,21 @@ class RadixAttention(nn.Module):
                     # Copy to pre-allocated bridge buffers (inside graph segment).
                     # These copies are captured in the graph. The originals become
                     # graph-private after del → freed → memory reusable by next segment.
-                    bridges.q[:n].copy_(q)
-                    bridges.k[:n].copy_(k)
-                    bridges.v[:n].copy_(v)
+                    # Reshape bridges to match tensor shapes (may be 2D or 3D).
+                    bq = bridges.q[:n].view(q.shape)
+                    bk = bridges.k[:n].view(k.shape) if k is not None else None
+                    bv = bridges.v[:n].view(v.shape) if v is not None else None
+                    bq.copy_(q)
+                    if bk is not None:
+                        bk.copy_(k)
+                    if bv is not None:
+                        bv.copy_(v)
                     output = bridges.output[:n]
                     del q, k, v  # release refs so originals can be freed in this segment
                     breakable_unified_attention_with_output(
-                        bridges.q[:n],
-                        bridges.k[:n],
-                        bridges.v[:n],
+                        bq,
+                        bk,
+                        bv,
                         output,
                         save_kv_cache,
                         self.layer_id,
