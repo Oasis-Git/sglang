@@ -23,6 +23,7 @@ from torch import nn
 
 from sglang.srt.compilation.compilation_config import register_split_op
 from sglang.srt.compilation.piecewise_context_manager import get_forward_context
+from sglang.srt.environ import envs
 from sglang.srt.utils.custom_op import register_custom_op
 
 if TYPE_CHECKING:
@@ -119,9 +120,14 @@ class RadixAttention(nn.Module):
                 output = q.new_empty((q.shape[0], self.tp_q_head_num * self.v_head_dim))
             else:
                 output = torch.empty_like(q)
-            unified_attention_with_output(
-                q, k, v, output, save_kv_cache, self.layer_id, **kwargs
-            )
+            if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
+                breakable_unified_attention_with_output(
+                    q, k, v, output, save_kv_cache, self.layer_id, **kwargs
+                )
+            else:
+                unified_attention_with_output(
+                    q, k, v, output, save_kv_cache, self.layer_id, **kwargs
+                )
             return output
         else:
             return forward_batch.attn_backend.forward(
@@ -133,6 +139,65 @@ class RadixAttention(nn.Module):
                 save_kv_cache,
                 **kwargs,
             )
+
+
+def _unified_attention_with_output_impl(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    output: torch.Tensor,
+    save_kv_cache: bool,
+    layer_id: int,
+    *,
+    q_rope: Optional[torch.Tensor] = None,
+    k_rope: Optional[torch.Tensor] = None,
+    sinks: Optional[torch.Tensor] = None,
+) -> None:
+    """Attention implementation shared by both torch.compile split-op and breakable CUDA graph paths."""
+    context = get_forward_context()
+    forward_batch = context.forward_batch
+    attention_layers = context.attention_layers
+    attention_layer = attention_layers[layer_id]
+
+    kwargs = {}
+    if q_rope is not None:
+        kwargs["q_rope"] = q_rope
+    if k_rope is not None:
+        kwargs["k_rope"] = k_rope
+    if sinks is not None:
+        kwargs["sinks"] = sinks
+
+    ret = forward_batch.attn_backend.forward(
+        query, key, value, attention_layer, forward_batch, save_kv_cache, **kwargs
+    )
+    assert (
+        output.numel() == ret.numel()
+    ), f"Output tensor element mismatch: {output.numel()} != {ret.numel()}"
+
+    output.view(ret.shape).copy_(ret)
+    return
+
+
+# Lazy-init: wrapped with non_graph(True) on first use to avoid import-time
+# dependency on breakable_cuda_graph (which requires cuda.bindings).
+_breakable_attention_fn = None
+
+
+def breakable_unified_attention_with_output(
+    query, key, value, output, save_kv_cache, layer_id, **kwargs
+):
+    global _breakable_attention_fn
+    if _breakable_attention_fn is None:
+        from sglang.srt.model_executor.breakable_cuda_graph.breakable_cuda_graph import (
+            non_graph,
+        )
+
+        _breakable_attention_fn = non_graph(True)(
+            _unified_attention_with_output_impl
+        )
+    return _breakable_attention_fn(
+        query, key, value, output, save_kv_cache, layer_id, **kwargs
+    )
 
 
 @register_custom_op(mutates_args=["output"])

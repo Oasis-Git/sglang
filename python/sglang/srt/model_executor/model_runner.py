@@ -2525,7 +2525,14 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             f"Capture piecewise CUDA graph begin. avail mem={before_mem:.2f} GB"
         )
 
-        self.piecewise_cuda_graph_runner = PiecewiseCudaGraphRunner(self)
+        if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
+            from sglang.srt.model_executor.breakable_piecewise_cuda_graph_runner import (
+                BreakablePiecewiseCudaGraphRunner,
+            )
+
+            self.piecewise_cuda_graph_runner = BreakablePiecewiseCudaGraphRunner(self)
+        else:
+            self.piecewise_cuda_graph_runner = PiecewiseCudaGraphRunner(self)
 
         after_mem = get_available_gpu_memory(self.device, self.gpu_id)
         mem_usage = before_mem - after_mem
