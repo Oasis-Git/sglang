@@ -919,33 +919,48 @@ class CudaGraphRunner:
         )
 
         if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
+            # Breakable CUDA graph path — env-var-driven; stays inline
+            # until Phase 2c extracts BreakableCudaGraphBackend.
             if memory_saver_adapter.enabled:
                 raise NotImplementedError(
                     "Breakable CUDA graph is not compatible with memory saver mode"
                 )
-            graph_ctx = BreakableCUDAGraphCapture
-        else:
-            graph_ctx = (
-                partial(memory_saver_adapter.cuda_graph, tag=GPU_MEMORY_TYPE_CUDA_GRAPH)
-                if memory_saver_adapter.enabled
-                else self.device_module.graph
+            captured_fn = (
+                eager_on_graph(True)(run_once_fn)
+                if self.model_runner.server_args.debug_cuda_graph
+                else run_once_fn
             )
+            with BreakableCUDAGraphCapture(
+                cuda_graph=graph, pool=pool, stream=stream
+            ):
+                out = captured_fn()
+            return out
 
-        if self.model_runner.server_args.debug_cuda_graph:
-            captured_fn = eager_on_graph(True)(run_once_fn)
-        else:
-            captured_fn = run_once_fn
+        # Full CUDA graph path — Phase 2b: delegate to FullCudaGraphBackend.
+        from sglang.srt.model_executor.cuda_graph_backend.full import (
+            FullCudaGraphBackend,
+        )
 
-        with graph_ctx(cuda_graph=graph, pool=pool, stream=stream):
-            out = captured_fn()
-        return out
+        return FullCudaGraphBackend.capture_into(
+            graph=graph,
+            pool=pool,
+            stream=stream,
+            device_module=self.device_module,
+            memory_saver_adapter=memory_saver_adapter,
+            run_once_fn=run_once_fn,
+        )
 
     def _create_device_graph(self):
         if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
             if _is_hip:
                 raise RuntimeError("Breakable CUDA graph is not supported on ROCm/HIP")
             return BreakableCUDAGraph()
-        return torch.cuda.CUDAGraph()
+        # Phase 2b: delegate to FullCudaGraphBackend.
+        from sglang.srt.model_executor.cuda_graph_backend.full import (
+            FullCudaGraphBackend,
+        )
+
+        return FullCudaGraphBackend.make_graph()
 
     def capture_one_batch_size(
         self, bs: int, forward: Callable, stream_idx: Optional[int] = None
