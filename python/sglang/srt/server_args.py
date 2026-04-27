@@ -818,8 +818,15 @@ class ServerArgs:
 
         current_platform.apply_server_args_defaults(self)
 
-        # Handle piecewise CUDA graph.
-        self._handle_piecewise_cuda_graph()
+        # Resolve CUDA graph configuration. Phase 1 of the cg-refactor:
+        # only stage 3 (piecewise auto-disable rules) is implemented;
+        # GPU-memory-based defaulting is still in _handle_gpu_memory_settings
+        # below until Phase 4 wires the new arg surface.
+        from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
+            resolve_cuda_graph_config,
+        )
+
+        resolve_cuda_graph_config(self)
 
         # Get GPU memory capacity, which is a common dependency for several configuration steps.
         gpu_mem = get_device_memory_capacity(self.device)
@@ -1179,74 +1186,10 @@ class ServerArgs:
                 )
             self.disable_piecewise_cuda_graph = True
 
-    def _handle_piecewise_cuda_graph(self):
-        # Skip auto-disable when enforce flag is set (for testing)
-        if self.enforce_piecewise_cuda_graph:
-            self.disable_piecewise_cuda_graph = False
-            return
-
-        # Disable piecewise cuda graph with following conditions:
-        # 1. Disable Model Arch
-        if self.get_model_config().is_piecewise_cuda_graph_disabled_model:
-            self.disable_piecewise_cuda_graph = True
-        # 2. DP attention
-        if self.enable_dp_attention:
-            self.disable_piecewise_cuda_graph = True
-        # 3. Torch compile
-        if self.enable_torch_compile:
-            self.disable_piecewise_cuda_graph = True
-        # 4. Pipeline parallelism
-        if self.pp_size > 1:
-            self.disable_piecewise_cuda_graph = True
-        # 5. Non-CUDA hardware (AMD, NPU, CPU, MPS, XPU, etc.)
-        if is_hip() or is_npu() or is_cpu() or is_mps() or is_xpu():
-            self.disable_piecewise_cuda_graph = True
-        # 5b. OOT platforms that don't support piecewise cuda graph
-        from sglang.srt.platforms import current_platform
-
-        if current_platform.is_out_of_tree():
-            if not current_platform.support_piecewise_cuda_graph():
-                self.disable_piecewise_cuda_graph = True
-        # 6. MoE A2A backend
-        if self.moe_a2a_backend != "none":
-            self.disable_piecewise_cuda_graph = True
-        # 7. LoRA
-        if self.lora_paths or self.enable_lora:
-            self.disable_piecewise_cuda_graph = True
-        # 8. Multimodal / VLM models
-        if self.get_model_config().is_multimodal:
-            self.disable_piecewise_cuda_graph = True
-        # 9. GGUF quantized models (custom dequant ops unsupported by torch.compile)
-        if (
-            self.load_format == "gguf"
-            or self.quantization == "gguf"
-            or check_gguf_file(self.model_path)
-        ):
-            self.disable_piecewise_cuda_graph = True
-        # 10. DLLM (diffusion LLM) models (context manager in forward breaks dynamo)
-        if self.dllm_algorithm is not None:
-            self.disable_piecewise_cuda_graph = True
-        # 11. CPU offload (breaks dynamo)
-        if self.cpu_offload_gb > 0 or self.enable_hierarchical_cache:
-            self.disable_piecewise_cuda_graph = True
-        # 12. Deterministic inference
-        if self.enable_deterministic_inference:
-            self.disable_piecewise_cuda_graph = True
-        # 13. PD disaggregation
-        if self.disaggregation_mode != "null":
-            self.disable_piecewise_cuda_graph = True
-        # 14. Symmetric memory (torch.cuda.use_mem_pool is untraceable by dynamo)
-        if self.enable_symm_mem:
-            self.disable_piecewise_cuda_graph = True
-        # 15. Expert distribution recorder
-        if self.enable_eplb or self.expert_distribution_recorder_mode is not None:
-            self.disable_piecewise_cuda_graph = True
-        # 16. Context parallel
-        if self.attn_cp_size > 1:
-            self.disable_piecewise_cuda_graph = True
-        # 18. CUDA Graph debug mode
-        if self.debug_cuda_graph:
-            self.disable_piecewise_cuda_graph = True
+    # _handle_piecewise_cuda_graph relocated to
+    # sglang.srt.model_executor.cuda_graph_runner.config_resolution
+    # as part of the cg-refactor (Phase 1c). Driven via
+    # ``resolve_cuda_graph_config(self)`` from ``__post_init__``.
 
     def _handle_multi_item_scoring(self):
         """Setup and validate multi-item scoring constraints.
