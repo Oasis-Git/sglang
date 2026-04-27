@@ -627,6 +627,12 @@ class ServerArgs:
     enable_profile_cuda_graph: bool = False
     enable_cudagraph_gc: bool = False
     debug_cuda_graph: bool = False
+    # Canonical per-phase CUDA graph configuration.
+    # Phase 0: field exists but is unread; legacy flags above still drive behavior.
+    # Phase 1+: filled in by ``cuda_graph_runner.config_resolution`` from
+    # legacy flags, then becomes the source of truth.
+    # Schema: {"decode": "full"|"breakable"|"tcpcg"|"disabled", "prefill": ...}
+    cuda_graph_mode: Optional[Dict[str, str]] = None
     enable_layerwise_nvtx_marker: bool = False
     enable_nccl_nvls: bool = False
     enable_symm_mem: bool = False
