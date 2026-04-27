@@ -14,7 +14,9 @@ import triton
 import triton.language as tl
 
 from sglang.jit_kernel.fixup_zero_kv import fixup_zero_kv_rows
-from sglang.srt.compilation.piecewise_context_manager import is_in_piecewise_cuda_graph
+from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
+    is_in_cuda_graph_capture,
+)
 from sglang.srt.environ import envs
 from sglang.srt.layers.attention.flashinfer_mla_backend import (
     FlashInferMLAAttnBackend,
@@ -591,7 +593,7 @@ class TRTLLMMLABackend(FlashInferMLAAttnBackend):
             has_prefix = any(forward_batch.extend_prefix_lens_cpu)
             fallback_to_flashinfer_impl = (
                 self.disable_chunked_prefix_cache and has_prefix
-            ) or is_in_piecewise_cuda_graph()
+            ) or is_in_cuda_graph_capture()
             if fallback_to_flashinfer_impl:
                 super().init_forward_metadata(forward_batch)
 

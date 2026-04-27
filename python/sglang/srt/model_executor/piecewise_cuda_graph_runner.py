@@ -29,11 +29,13 @@ import tqdm
 from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
 from sglang.srt.compilation.compilation_config import CompilationConfig
 from sglang.srt.compilation.compile import install_torch_compiled
-from sglang.srt.compilation.piecewise_context_manager import (
-    enable_piecewise_cuda_graph,
-    enable_piecewise_cuda_graph_compile,
-    set_forward_context,
+from sglang.srt.compilation.compile_phase import (
+    enable_torch_compile_warmup,
     set_pcg_capture_stream,
+)
+from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
+    enable_cuda_graph_capture,
+    set_forward_context,
 )
 from sglang.srt.distributed import get_tensor_model_parallel_rank
 from sglang.srt.distributed.device_communicators.pynccl_allocator import (
@@ -279,7 +281,7 @@ class PiecewiseCudaGraphRunner:
         # Set graph pool id globally to be able to use symmetric memory
         set_graph_pool_id(get_global_graph_memory_pool())
 
-        with enable_piecewise_cuda_graph():
+        with enable_cuda_graph_capture():
             language_model = getattr(
                 self.model_runner.model, "language_model", self.model_runner.model
             )
@@ -298,7 +300,7 @@ class PiecewiseCudaGraphRunner:
                     graph_pool=get_global_graph_memory_pool(),
                 )
 
-                with enable_piecewise_cuda_graph_compile():
+                with enable_torch_compile_warmup():
                     compile_range = (
                         tqdm.tqdm(list(reversed(self.capture_num_tokens)))
                         if get_tensor_model_parallel_rank() == 0
@@ -779,7 +781,7 @@ class PiecewiseCudaGraphRunner:
         forward_batch: ForwardBatch,
         **kwargs,
     ) -> Union[LogitsProcessorOutput, PPProxyTensors, EmbeddingPoolerOutput]:
-        with enable_piecewise_cuda_graph():
+        with enable_cuda_graph_capture():
             static_forward_batch = self.replay_prepare(forward_batch, **kwargs)
             # Replay
             with set_forward_context(

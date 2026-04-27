@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import torch
 
-from sglang.srt.compilation.piecewise_context_manager import is_in_piecewise_cuda_graph
+from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
+    is_in_cuda_graph_capture,
+)
 from sglang.srt.environ import envs
 from sglang.srt.hardware_backend.npu.utils import FusedMoEMode, npu_format_cast
 from sglang.srt.layers import deep_gemm_wrapper
@@ -165,7 +167,7 @@ class DeepEPMoE(FusedMoE):
         hidden_states: torch.Tensor,
         topk_output: TopKOutput,
     ):
-        if is_in_piecewise_cuda_graph():
+        if is_in_cuda_graph_capture():
             assert TopKOutputChecker.format_is_standard(
                 topk_output
             ), "Only standard topk output is supported for piecewise cuda graph"

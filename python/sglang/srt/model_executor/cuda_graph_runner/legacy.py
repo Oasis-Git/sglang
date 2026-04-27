@@ -94,7 +94,7 @@ except ImportError:
 _is_hip = is_hip()
 
 if not _is_hip:
-    from sglang.srt.model_executor.breakable_cuda_graph.breakable_cuda_graph import (
+    from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph import (
         BreakableCUDAGraph,
         BreakableCUDAGraphCapture,
         eager_on_graph,

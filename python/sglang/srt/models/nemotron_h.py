@@ -22,9 +22,9 @@ import torch
 from torch import nn
 
 from sglang.srt.compilation.compilation_config import register_split_op
-from sglang.srt.compilation.piecewise_context_manager import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
     get_forward_context,
-    is_in_piecewise_cuda_graph,
+    is_in_cuda_graph_capture,
 )
 from sglang.srt.configs import NemotronHConfig
 from sglang.srt.configs.nemotron_h import ATTENTION, MAMBA, MLP, MOE
@@ -59,10 +59,8 @@ from sglang.srt.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from sglang.srt.model_executor.breakable_cuda_graph.breakable_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph import (
     eager_on_graph,
-)
-from sglang.srt.model_executor.breakable_cuda_graph.context import (
     is_in_breakable_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
@@ -228,7 +226,11 @@ class NemotronHMoE(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # torch.compile cannot trace CUDA streams, so use the non-overlapping
         # path when inside piecewise CUDA graph compilation.
-        if _is_cuda and not is_in_piecewise_cuda_graph():
+        # TODO(cg-refactor): bucket-C candidate — the genuine constraint is
+        # dynamo tracing, not capture-or-replay. Switch to
+        # ``torch.compiler.is_compiling()`` once we verify that replay
+        # tolerates the overlapping path. Tracking in plan §6.5 audit rule.
+        if _is_cuda and not is_in_cuda_graph_capture():
             return self._forward_core_shared_routed_overlap(hidden_states)
         else:
             return self._forward_core_normal(hidden_states)
@@ -440,7 +442,7 @@ class NemotronHMambaDecoderLayer(nn.Module):
             breakable_nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual
 
-        if is_in_piecewise_cuda_graph():
+        if is_in_cuda_graph_capture():
             output = torch.empty_like(hidden_states)
             nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual

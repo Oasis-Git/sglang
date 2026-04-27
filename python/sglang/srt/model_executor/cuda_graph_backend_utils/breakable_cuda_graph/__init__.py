@@ -1,5 +1,21 @@
-"""BCG primitives — relocated in Phase 1 from
-``model_executor/breakable_cuda_graph/``.
+"""BCG primitives — segmented CUDA graph capture with eager break points.
 
-Phase 0 scaffold; empty until Phase 1.
+Public API (also reachable via the deeper module paths):
+  - ``BreakableCUDAGraph``, ``BreakableCUDAGraphCapture`` — capture/replay
+  - ``eager_on_graph`` — decorator that marks a callable as a graph break
+  - ``enable_breakable_cuda_graph`` — context that flips the BCG runtime flag
+  - ``is_in_breakable_cuda_graph`` — runtime flag getter
+
+Relocated from ``model_executor/breakable_cuda_graph/`` during the
+cg-refactor. Old paths re-export from here for transition.
 """
+
+from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph.breakable_cuda_graph import (  # noqa: F401
+    BreakableCUDAGraph,
+    BreakableCUDAGraphCapture,
+    eager_on_graph,
+)
+from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph.context import (  # noqa: F401
+    enable_breakable_cuda_graph,
+    is_in_breakable_cuda_graph,
+)
