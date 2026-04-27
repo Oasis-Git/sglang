@@ -5836,6 +5836,34 @@ class ServerArgs:
             "while still going through the CUDA graph capture / replay path. "
             "Useful for debugging CUDA graph capture / replay issues.",
         )
+
+        # cg-refactor: canonical per-phase CUDA graph configuration.
+        # Phase 0/1: field exists but is unread; legacy flags drive behavior.
+        # Phase 4 will flesh out validation, convenience flags, and defaults.
+        def _cuda_graph_mode_type(raw: str) -> Dict[str, str]:
+            import json
+
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise argparse.ArgumentTypeError(
+                    f"--cuda-graph-mode must be a JSON object, got: {raw!r} ({e})"
+                ) from e
+            if not isinstance(parsed, dict):
+                raise argparse.ArgumentTypeError(
+                    f"--cuda-graph-mode must decode to a JSON object, got {type(parsed).__name__}"
+                )
+            return {str(k): str(v) for k, v in parsed.items()}
+
+        parser.add_argument(
+            "--cuda-graph-mode",
+            type=_cuda_graph_mode_type,
+            default=ServerArgs.cuda_graph_mode,
+            help="Canonical per-phase CUDA graph configuration as a JSON "
+            "object, e.g. '{\"decode\":\"full\",\"prefill\":\"breakable\"}'. "
+            "Allowed values per phase: full, breakable, tcpcg, disabled. "
+            "Phase 4 of the cg-refactor wires this up; today it is a no-op.",
+        )
         parser.add_argument(
             "--enable-layerwise-nvtx-marker",
             action="store_true",
