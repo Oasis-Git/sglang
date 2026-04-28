@@ -28,7 +28,7 @@ import tqdm
 
 from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
 # CompilationConfig + install_torch_compiled are now used via
-# TCPiecewiseCudaGraphBackend (Phase 2d) — no direct imports needed here.
+# TCPiecewiseCudaGraphBackend — no direct imports needed here.
 from sglang.srt.compilation.compile_phase import (
     enable_torch_compile_warmup,
     set_pcg_capture_stream,
@@ -50,7 +50,7 @@ from sglang.srt.layers.dp_attention import (
     set_is_extend_in_batch,
 )
 from sglang.srt.layers.logits_processor import LogitsProcessorOutput
-# get_moe_a2a_backend usage moved to TCPiecewiseCudaGraphBackend (Phase 2d).
+# get_moe_a2a_backend usage moved to TCPiecewiseCudaGraphBackend.
 from sglang.srt.layers.pooler import EmbeddingPoolerOutput
 from sglang.srt.layers.utils import MultiPlatformOp
 from sglang.srt.model_executor.forward_batch_info import (
@@ -170,8 +170,8 @@ class PiecewiseCudaGraphRunner:
 
         set_torch_compile_config()
 
-        # Phase 2d: CompilationConfig construction (incl. MoE A2A split-op
-        # adjustment) lives in TCPiecewiseCudaGraphBackend.
+        # CompilationConfig construction (incl. MoE A2A split-op
+        # adjustment) lives on the backend.
         from sglang.srt.model_executor.cuda_graph_backend.tcpcg import (
             TCPiecewiseCudaGraphBackend,
         )
@@ -285,7 +285,6 @@ class PiecewiseCudaGraphRunner:
                 # Dummy warmup for jit kernel
                 self.warmup_compile(num_tokens=self.capture_num_tokens[0])
 
-                # Phase 2d: install_torch_compiled wraps via the backend.
                 from sglang.srt.model_executor.cuda_graph_backend.tcpcg import (
                     TCPiecewiseCudaGraphBackend,
                 )

@@ -1,15 +1,19 @@
-"""Resolves the CUDA graph configuration from ``ServerArgs``.
+"""Resolves the CUDA graph configuration on ``ServerArgs``.
 
-Final design (per ``refactor/plan.md``) is a four-stage pipeline:
-  1. **Parse** — convenience + deprecated flags → canonical ``cuda_graph_mode``.
-  2. **Default** — GPU-memory-based sizes, bucket lists, per-backend defaults.
-  3. **Compatibility** — per-(phase, backend) auto-disable conditions.
-  4. **Validate** — reject impossible combinations.
+The pipeline runs in four stages:
+  1. **Parse** — convenience + legacy flags merge into the canonical
+     ``cuda_graph_mode`` dict.
+  2. **Compatibility** — per-phase auto-disable rules (e.g. multimodal,
+     LoRA, DP attention) flip the legacy ``disable_piecewise_cuda_graph``
+     field.
+  3. **Downgrade** — silently rewrite combinations that are accepted at
+     parse time but not actually wired (today: ``(prefill, full)``).
+  4. **Validate** — reject unknown phases / backends.
 
-Phase 1 landed stage 3 (compatibility, 18 conditions for piecewise/tcpcg).
-Phase 4a lands stage 1 (parse) + stage 4 (validate). GPU-memory-based
-defaulting (stage 2) still lives in
-``server_args._handle_gpu_memory_settings`` and migrates here later.
+Stage 1 runs once before the compatibility table and once after, so any
+auto-disable flips propagate into the resolved mode. GPU-memory-driven
+size defaulting (``cuda_graph_max_bs``, ``piecewise_cuda_graph_tokens``)
+still lives in ``server_args._handle_gpu_memory_settings``.
 """
 
 from __future__ import annotations
@@ -26,19 +30,40 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+PHASE_DECODE = "decode"
+PHASE_PREFILL = "prefill"
+ALL_PHASES = (PHASE_DECODE, PHASE_PREFILL)
+
+BACKEND_FULL = "full"
+BACKEND_BREAKABLE = "breakable"
+BACKEND_TCPCG = "tcpcg"
+BACKEND_DISABLED = "disabled"
+
+ALLOWED_BACKENDS_PER_PHASE = {
+    PHASE_DECODE: (BACKEND_FULL, BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
+    # ``(prefill, full)`` is accepted at parse time but downgraded to
+    # ``(prefill, disabled)`` with a warning — full CUDA graph capture
+    # doesn't fit prefill's variable-shape model. Decode keeps full as
+    # the default.
+    PHASE_PREFILL: (BACKEND_FULL, BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
+}
+
+_DEFAULT_CUDA_GRAPH_MODE = {
+    PHASE_DECODE: BACKEND_FULL,
+    PHASE_PREFILL: BACKEND_TCPCG,
+}
+
+
 # ---------------------------------------------------------------------------
-# Stage 3 — compatibility checks
+# Stage 2 — per-phase auto-disable rules for piecewise (prefill).
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class _PiecewiseDisableRule:
-    """One reason to auto-disable piecewise CUDA graph for the prefill phase.
-
-    Replaces the long if/if cascade in the old
-    ``ServerArgs._handle_piecewise_cuda_graph`` with a data-driven table
-    so reviewers can see all conditions in one place and add new ones
-    without thinking about ordering.
+    """One reason to auto-disable piecewise CUDA graph for the prefill
+    phase. The data-table form replaces a long if/if cascade so the full
+    set of conditions is visible in one place.
     """
 
     name: str
@@ -107,9 +132,9 @@ _PIECEWISE_DISABLE_RULES: List[_PiecewiseDisableRule] = [
 def _apply_piecewise_compatibility(server_args: "ServerArgs") -> None:
     """Apply the prefill (piecewise) auto-disable rules.
 
-    Mirrors the legacy ``ServerArgs._handle_piecewise_cuda_graph`` exactly,
-    but as a data table for readability. ``--enforce-piecewise-cuda-graph``
-    bypasses the entire table (testing override).
+    ``--enforce-piecewise-cuda-graph`` bypasses the entire table for
+    testing. Predicates do not short-circuit — every rule runs even
+    after a match, in case any has incidental side effects.
     """
     if server_args.enforce_piecewise_cuda_graph:
         server_args.disable_piecewise_cuda_graph = False
@@ -118,47 +143,20 @@ def _apply_piecewise_compatibility(server_args: "ServerArgs") -> None:
     for rule in _PIECEWISE_DISABLE_RULES:
         if rule.predicate(server_args):
             server_args.disable_piecewise_cuda_graph = True
-            # Legacy behavior did not short-circuit; preserve that in case
-            # any predicate has incidental side effects.
 
 
 # ---------------------------------------------------------------------------
-# Top-level entry point
+# Stage 1 — parse: legacy + convenience + JSON → canonical mode.
 # ---------------------------------------------------------------------------
-
-
-PHASE_DECODE = "decode"
-PHASE_PREFILL = "prefill"
-ALL_PHASES = (PHASE_DECODE, PHASE_PREFILL)
-
-BACKEND_FULL = "full"
-BACKEND_BREAKABLE = "breakable"
-BACKEND_TCPCG = "tcpcg"
-BACKEND_DISABLED = "disabled"
-
-ALLOWED_BACKENDS_PER_PHASE = {
-    PHASE_DECODE: (BACKEND_FULL, BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
-    PHASE_PREFILL: (BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
-    # (prefill, full) is intentionally a NotImplementedError stub — see
-    # plan §6 Q1. The validator rejects it explicitly.
-}
-
-_DEFAULT_CUDA_GRAPH_MODE = {
-    # Today's defaults: full decode + tcpcg prefill. Phase 5 flips the
-    # prefill default to breakable per the plan goal once the breakable
-    # path is exercised end-to-end across the model coverage matrix.
-    PHASE_DECODE: BACKEND_FULL,
-    PHASE_PREFILL: BACKEND_TCPCG,
-}
 
 
 def _parse_canonical(server_args: "ServerArgs") -> None:
-    """Stage 1 — populate ``server_args.cuda_graph_mode`` from explicit
-    JSON, convenience flags, and legacy flags.
+    """Populate ``server_args.cuda_graph_mode`` from explicit JSON,
+    convenience flags, and legacy flags.
 
-    Precedence (highest first), per plan §3.2 + §6 Q8:
+    Precedence (highest first):
       1. ``--cuda-graph-mode`` JSON (per phase it specifies).
-      2. Phase 4b convenience flags:
+      2. Per-phase convenience flags:
          - ``--{prefill,decode}-disable-cuda-graph`` → ``disabled``.
          - ``--{prefill,decode}-cuda-graph-backend`` → that backend.
       3. Legacy flags:
@@ -167,10 +165,10 @@ def _parse_canonical(server_args: "ServerArgs") -> None:
          - ``--enable-breakable-cuda-graph`` → prefill ``breakable``.
       4. Defaults: ``{decode: full, prefill: tcpcg}``.
 
-    On conflict between higher- and lower-precedence sources, a warning
-    is emitted naming the override (Q8). Re-runs of ``_parse_canonical``
-    are idempotent — the resolved ``cuda_graph_mode`` becomes the
-    explicit input for any subsequent re-parse.
+    A warning is emitted whenever a higher-precedence source overrides
+    a lower one. Re-runs are idempotent — the resolved
+    ``cuda_graph_mode`` becomes the explicit input for any subsequent
+    re-parse.
     """
     explicit: Dict[str, str] = dict(server_args.cuda_graph_mode or {})
 
@@ -251,8 +249,39 @@ def _parse_canonical(server_args: "ServerArgs") -> None:
     server_args.cuda_graph_mode = resolved
 
 
+# ---------------------------------------------------------------------------
+# Stage 3 — downgrade unsupported combinations.
+# ---------------------------------------------------------------------------
+
+
+def _downgrade_unsupported_combinations(server_args: "ServerArgs") -> None:
+    """Silently rewrite combinations that are accepted at parse time but
+    not actually wired. Today this is only ``(prefill, full)``.
+
+    Emits a warning so the user knows their requested config didn't take
+    effect. Decode-side ``full`` is unaffected.
+    """
+    mode = server_args.cuda_graph_mode or {}
+    if mode.get(PHASE_PREFILL) == BACKEND_FULL:
+        logger.warning(
+            "(prefill, full) is not implemented — full CUDA graph "
+            "capture for prefill only fits fixed-shape deployments. "
+            "Downgrading prefill to 'disabled' for this server. "
+            "Use 'breakable' or 'tcpcg' for prefill if you want CUDA "
+            "graphs there."
+        )
+        mode = dict(mode)
+        mode[PHASE_PREFILL] = BACKEND_DISABLED
+        server_args.cuda_graph_mode = mode
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 — validate.
+# ---------------------------------------------------------------------------
+
+
 def _validate_canonical(server_args: "ServerArgs") -> None:
-    """Stage 4 — reject invalid backend choices per phase (plan §6 Q1)."""
+    """Reject invalid backend choices per phase."""
     mode = server_args.cuda_graph_mode or {}
     for phase, backend in mode.items():
         if phase not in ALLOWED_BACKENDS_PER_PHASE:
@@ -262,33 +291,28 @@ def _validate_canonical(server_args: "ServerArgs") -> None:
             )
         allowed = ALLOWED_BACKENDS_PER_PHASE[phase]
         if backend not in allowed:
-            if phase == PHASE_PREFILL and backend == BACKEND_FULL:
-                raise NotImplementedError(
-                    "(prefill, full) is not implemented — full CUDA graph "
-                    "capture for prefill only fits fixed-shape deployments. "
-                    "Use 'breakable' or 'tcpcg' for prefill."
-                )
             raise ValueError(
                 f"--cuda-graph-mode {phase}={backend!r} is not allowed; "
                 f"allowed values for {phase}: {allowed}"
             )
 
 
-def resolve_cuda_graph_config(server_args: "ServerArgs") -> None:
-    """Mutates ``server_args`` in place with resolved CUDA graph state.
+# ---------------------------------------------------------------------------
+# Top-level entry point — invoked from ``ServerArgs.__post_init__``.
+# ---------------------------------------------------------------------------
 
-    Called from ``ServerArgs.__post_init__``. Phase 1 implemented stage 3
-    (compatibility checks for piecewise/tcpcg). Phase 4a adds stage 1
-    (parse legacy + JSON into canonical ``cuda_graph_mode``) and stage 4
-    (validate). Stage 2 (default sizes) still lives in ``server_args``.
+
+def resolve_cuda_graph_config(server_args: "ServerArgs") -> None:
+    """Mutates ``server_args`` in place with the resolved CUDA graph state.
 
     Stage order matters: parse first so legacy fields stay authoritative
-    inputs; then run the existing legacy-flag-driven compatibility table
-    (which may mutate ``disable_piecewise_cuda_graph``); then re-parse
-    so any compatibility-driven flag changes propagate into
-    ``cuda_graph_mode``; finally validate.
+    inputs; then run the legacy-flag-driven compatibility table (which may
+    mutate ``disable_piecewise_cuda_graph``); then re-parse so any
+    compatibility-driven flag changes propagate into ``cuda_graph_mode``;
+    then downgrade unsupported combinations; finally validate.
     """
     _parse_canonical(server_args)
     _apply_piecewise_compatibility(server_args)
     _parse_canonical(server_args)
+    _downgrade_unsupported_combinations(server_args)
     _validate_canonical(server_args)

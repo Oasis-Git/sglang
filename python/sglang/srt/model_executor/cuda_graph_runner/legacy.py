@@ -573,12 +573,12 @@ class CudaGraphRunner:
         self.device_module = torch.get_device_module(self.device)
         self.graphs = {}
         self.output_buffers = {}
-        # Phase 3b/c (partial): replaces the env-var read inside
-        # ``_create_device_graph`` / ``_capture_graph`` with a constructor
-        # parameter, driven by the ``DecodeCudaGraphRunner`` factory off
-        # ``cuda_graph_mode["decode"]``. The env var
-        # ``SGLANG_USE_BREAKABLE_CUDA_GRAPH`` remains as a fallback for
-        # users who set it directly.
+        # Whether ``_create_device_graph`` / ``_capture_graph`` should
+        # use the breakable primitives instead of full ``torch.cuda.CUDAGraph``.
+        # Driven by the ``DecodeCudaGraphRunner`` factory off
+        # ``cuda_graph_mode["decode"]``; the env var
+        # ``SGLANG_USE_BREAKABLE_CUDA_GRAPH`` is a fallback for users
+        # who set it directly.
         if use_breakable_capture is None:
             use_breakable_capture = envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get()
         self.use_breakable_capture = use_breakable_capture
@@ -929,8 +929,6 @@ class CudaGraphRunner:
         )
 
         if self.use_breakable_capture:
-            # Breakable CUDA graph path — Phase 2c: delegate to
-            # BreakableCudaGraphBackend.
             from sglang.srt.model_executor.cuda_graph_backend.breakable import (
                 BreakableCudaGraphBackend,
             )
@@ -944,7 +942,6 @@ class CudaGraphRunner:
                 memory_saver_adapter=memory_saver_adapter,
             )
 
-        # Full CUDA graph path — Phase 2b: delegate to FullCudaGraphBackend.
         from sglang.srt.model_executor.cuda_graph_backend.full import (
             FullCudaGraphBackend,
         )
@@ -960,14 +957,11 @@ class CudaGraphRunner:
 
     def _create_device_graph(self):
         if self.use_breakable_capture:
-            # Phase 2c: delegate to BreakableCudaGraphBackend (HIP guard
-            # moves into the backend's make_graph).
             from sglang.srt.model_executor.cuda_graph_backend.breakable import (
                 BreakableCudaGraphBackend,
             )
 
             return BreakableCudaGraphBackend.make_graph()
-        # Phase 2b: delegate to FullCudaGraphBackend.
         from sglang.srt.model_executor.cuda_graph_backend.full import (
             FullCudaGraphBackend,
         )

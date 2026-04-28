@@ -6,62 +6,35 @@ Uses ``CompilationConfig``, the FX/inductor pipeline from
 the model forward at attention layers; per-shape compiled callables
 each internally capture sub-graphs via
 ``compilation/cuda_piecewise_backend``.
-
-Phase 2d — minimal extraction:
-  - ``build_compilation_config(server_args)`` consolidates the
-    ``CompilationConfig`` construction (compiler choice, debug mode,
-    MoE A2A split-op adjustments).
-  - ``install_compile(language_model, ...)`` wraps the language model
-    with ``install_torch_compiled``.
-  - ``PiecewiseCudaGraphRunner`` delegates to these primitives in its
-    ``__init__`` and ``capture()``.
-  - The ABC methods (``prepare`` / ``capture_one`` / ``replay``) stay
-    NotImplementedError until Phase 3 (runner unification).
-
-Lifted from ``model_executor/piecewise_cuda_graph_runner.py``
-``__init__`` (lines 173–188 at the time of the cg-refactor) and the
-``install_torch_compiled`` call site in ``capture()`` (line 295).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sglang.srt.compilation.compilation_config import CompilationConfig
 from sglang.srt.compilation.compile import install_torch_compiled
 from sglang.srt.layers.moe.utils import get_moe_a2a_backend
-from sglang.srt.model_executor.cuda_graph_backend.base import (
-    BaseCudaGraphBackend,
-)
 
 if TYPE_CHECKING:
-    from sglang.srt.model_executor.cuda_graph_runner.base_runner import (
-        BaseCudaGraphRunner,
-    )
     from sglang.srt.server_args import ServerArgs
 
 
 _VALID_COMPILERS = ("eager", "inductor")
 
 
-class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
+class TCPiecewiseCudaGraphBackend:
     """torch.compile-driven piecewise capture; attention metadata
     recomputed at replay (outside the compiled callable's sub-graphs).
     """
-
-    captures_attn_metadata = False
-
-    # ------------------------------------------------------------------
-    # Phase 2d primitives — direct, no runner-coupling.
-    # ------------------------------------------------------------------
 
     @staticmethod
     def build_compilation_config(server_args: "ServerArgs") -> CompilationConfig:
         """Construct the ``CompilationConfig`` from ``ServerArgs``.
 
-        Mirrors the legacy ``PiecewiseCudaGraphRunner.__init__``
-        sequence: validates the compiler choice, builds the config,
-        adds the MoE A2A split-op when DeepEP/Mooncake is in use.
+        Validates the ``--piecewise-cuda-graph-compiler`` choice, builds
+        the config, and registers the MoE A2A split-op when DeepEP /
+        Mooncake is in use.
         """
         assert server_args.piecewise_cuda_graph_tokens is not None, (
             "piecewise_cuda_graph_tokens is not set"
@@ -101,25 +74,4 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
             dynamic_arg_dims=dynamic_arg_dims,
             compile_config=compile_config,
             graph_pool=graph_pool,
-        )
-
-    # ------------------------------------------------------------------
-    # Abstract interface — wired up in Phase 3.
-    # ------------------------------------------------------------------
-
-    def prepare(self, runner: "BaseCudaGraphRunner") -> None:
-        raise NotImplementedError(
-            "TCPiecewiseCudaGraphBackend.prepare lands in Phase 3 (runner unification)"
-        )
-
-    def capture_one(
-        self, shape_key: int, forward_fn: Callable[[], Any]
-    ) -> None:
-        raise NotImplementedError(
-            "TCPiecewiseCudaGraphBackend.capture_one lands in Phase 3 (runner unification)"
-        )
-
-    def replay(self, shape_key: int) -> None:
-        raise NotImplementedError(
-            "TCPiecewiseCudaGraphBackend.replay lands in Phase 3 (runner unification)"
         )

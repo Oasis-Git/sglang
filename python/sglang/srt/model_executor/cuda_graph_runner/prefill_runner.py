@@ -1,18 +1,14 @@
 """PrefillCudaGraphRunner — runs the EXTEND phase under a pluggable backend.
 
-Phase 3 — minimal naming + factory:
-  - ``PrefillCudaGraphRunner`` is a factory that returns either a
-    ``BreakableCudaGraphRunner`` or a ``PiecewiseCudaGraphRunner``
-    based on ``ServerArgs.enable_breakable_cuda_graph``. Mirrors
-    today's branch in ``model_runner.init_cuda_graphs``.
-  - Phase 4 will drive the choice via the canonical
-    ``cuda_graph_mode`` config (``"breakable"`` vs ``"tcpcg"`` vs
-    ``"disabled"``); the factory bridges that gap.
+Factory class: returns either a ``BreakableCudaGraphRunner`` or a
+``PiecewiseCudaGraphRunner`` instance based on
+``cuda_graph_mode["prefill"]``. The "disabled" branch is handled at the
+model_runner level — if prefill is disabled, the factory is not
+constructed.
 
-The actual capture/replay machinery still lives in the legacy
-``Piecewise`` / ``Breakable`` runner classes; this is a naming layer,
-not a behavior change. Phase 3 (subsequent commits) will migrate the
-bodies into a single ``PrefillCudaGraphRunner`` driven by a backend.
+The "full" backend is silently downgraded to "disabled" at config
+resolution time (see ``config_resolution._downgrade_unsupported_combinations``)
+because full CUDA graph capture only fits fixed-shape deployments.
 """
 
 from __future__ import annotations
@@ -32,11 +28,6 @@ class PrefillCudaGraphRunner:
     """
 
     def __new__(cls, model_runner: "ModelRunner"):
-        # Phase 4a: drive selection from canonical ``cuda_graph_mode``
-        # (resolved from legacy flags + JSON in
-        # ``cuda_graph_runner.config_resolution._parse_canonical``).
-        # The "disabled" branch is handled at the model_runner level —
-        # if prefill is disabled, the factory is not constructed.
         from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
             BACKEND_BREAKABLE,
             BACKEND_TCPCG,

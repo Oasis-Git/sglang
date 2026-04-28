@@ -1,21 +1,20 @@
-"""Transition shim — moved during the cg-refactor.
+"""Backwards-compat shim — moved.
 
 The CUDA-graph-capture flag and ``ForwardContext`` propagation now live
 in ``sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph.context_manager``.
 The torch.compile-warmup flag and capture-stream context now live in
 ``sglang.srt.compilation.compile_phase``.
 
-This module re-exports everything under the **old** names so unaudited
-import sites keep working. Audited sites import from the new locations
-directly. Removed in Phase 6 of the refactor.
+This module re-exports both new and old symbol names so unaudited
+import sites keep working.
 
-Symbol rename map:
+Symbol rename map (old → new):
 
-    is_in_piecewise_cuda_graph        -> is_in_cuda_graph_capture
-    enable_piecewise_cuda_graph       -> enable_cuda_graph_capture
-    is_in_pcg_torch_compile           -> is_in_torch_compile_warmup
-    enable_piecewise_cuda_graph_compile -> enable_torch_compile_warmup
-    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG -> CUDA_GRAPH_CAPTURE_FAILED_MSG
+    is_in_piecewise_cuda_graph              → is_in_cuda_graph_capture
+    enable_piecewise_cuda_graph             → enable_cuda_graph_capture
+    is_in_pcg_torch_compile                 → is_in_torch_compile_warmup
+    enable_piecewise_cuda_graph_compile     → enable_torch_compile_warmup
+    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG → CUDA_GRAPH_CAPTURE_FAILED_MSG
 
 Stream + ForwardContext helpers keep their names; only the home moved.
 """
@@ -40,8 +39,8 @@ from sglang.srt.compilation.compile_phase import (  # noqa: F401
     set_pcg_capture_stream,
 )
 
-# Legacy-name aliases. Audited callers should import the renamed symbols
-# directly from their new homes.
+# Legacy-name aliases. Audited callers should import the renamed
+# symbols directly from their new homes.
 is_in_piecewise_cuda_graph = is_in_cuda_graph_capture
 enable_piecewise_cuda_graph = enable_cuda_graph_capture
 is_in_pcg_torch_compile = is_in_torch_compile_warmup

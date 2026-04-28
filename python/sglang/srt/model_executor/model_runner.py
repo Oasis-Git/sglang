@@ -2624,9 +2624,6 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             GraphRunnerCls = current_platform.get_graph_runner_cls()
             self.graph_runner = GraphRunnerCls(self)
         else:
-            # Phase 3 of cg-refactor: DecodeCudaGraphRunner is the
-            # canonical name for the decode-phase runner; today it
-            # subclasses CudaGraphRunner unchanged.
             from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (
                 DecodeCudaGraphRunner,
             )
@@ -2654,6 +2651,17 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         if self.server_args.disable_piecewise_cuda_graph:
             logger.info(
                 "Disable piecewise CUDA graph because --disable-piecewise-cuda-graph is set"
+            )
+            return
+
+        # If cuda_graph_mode resolved prefill to "disabled" (e.g., via
+        # --prefill-disable-cuda-graph, the (prefill, full) downgrade,
+        # or the legacy disable flag), skip construction.
+        prefill_mode = (self.server_args.cuda_graph_mode or {}).get("prefill")
+        if prefill_mode == "disabled":
+            logger.info(
+                "Disable piecewise CUDA graph because cuda_graph_mode "
+                "resolved prefill='disabled'"
             )
             return
 
@@ -2756,10 +2764,6 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             f"Capture piecewise CUDA graph begin. avail mem={before_mem:.2f} GB"
         )
 
-        # Phase 3 of cg-refactor: PrefillCudaGraphRunner is the canonical
-        # name; the factory selects breakable vs tcpcg by today's
-        # ``enable_breakable_cuda_graph`` flag (Phase 4 will drive it via
-        # ``cuda_graph_mode``).
         from sglang.srt.model_executor.cuda_graph_runner.prefill_runner import (
             PrefillCudaGraphRunner,
         )

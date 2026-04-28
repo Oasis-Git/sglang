@@ -632,9 +632,9 @@ class ServerArgs:
     # + legacy flags during ``ServerArgs.__post_init__``.
     # Schema: {"decode": "full"|"breakable"|"tcpcg"|"disabled", "prefill": ...}
     cuda_graph_mode: Optional[Dict[str, str]] = None
-    # Phase 4b convenience flags — sugar for ``cuda_graph_mode``. See plan §3.2.
-    # Each translates to a single-phase entry; ``--cuda-graph-mode`` JSON wins
-    # when there is a conflict (warning emitted).
+    # Convenience flags — sugar for ``cuda_graph_mode``. Each translates
+    # to a single-phase entry; ``--cuda-graph-mode`` JSON wins on conflict
+    # (warning emitted).
     prefill_disable_cuda_graph: bool = False
     decode_disable_cuda_graph: bool = False
     prefill_cuda_graph_backend: Optional[str] = None  # full|breakable|tcpcg|disabled
@@ -824,10 +824,11 @@ class ServerArgs:
 
         current_platform.apply_server_args_defaults(self)
 
-        # Resolve CUDA graph configuration. Phase 1 of the cg-refactor:
-        # only stage 3 (piecewise auto-disable rules) is implemented;
-        # GPU-memory-based defaulting is still in _handle_gpu_memory_settings
-        # below until Phase 4 wires the new arg surface.
+        # Resolve CUDA graph configuration: parse legacy + convenience
+        # flags into the canonical ``cuda_graph_mode``, run the per-phase
+        # auto-disable rules, downgrade unsupported combinations, and
+        # validate. GPU-memory-based size defaulting still lives in
+        # ``_handle_gpu_memory_settings`` below.
         from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
             resolve_cuda_graph_config,
         )
@@ -1192,10 +1193,9 @@ class ServerArgs:
                 )
             self.disable_piecewise_cuda_graph = True
 
-    # _handle_piecewise_cuda_graph relocated to
-    # sglang.srt.model_executor.cuda_graph_runner.config_resolution
-    # as part of the cg-refactor (Phase 1c). Driven via
-    # ``resolve_cuda_graph_config(self)`` from ``__post_init__``.
+    # The piecewise CUDA graph auto-disable table now lives in
+    # ``sglang.srt.model_executor.cuda_graph_runner.config_resolution``
+    # and runs via ``resolve_cuda_graph_config(self)`` from ``__post_init__``.
 
     def _handle_multi_item_scoring(self):
         """Setup and validate multi-item scoring constraints.
@@ -5843,9 +5843,7 @@ class ServerArgs:
             "Useful for debugging CUDA graph capture / replay issues.",
         )
 
-        # cg-refactor: canonical per-phase CUDA graph configuration.
-        # Phase 0/1: field exists but is unread; legacy flags drive behavior.
-        # Phase 4 will flesh out validation, convenience flags, and defaults.
+        # Canonical per-phase CUDA graph configuration.
         def _cuda_graph_mode_type(raw: str) -> Dict[str, str]:
             import json
 
@@ -5873,7 +5871,7 @@ class ServerArgs:
             "this JSON sets both phases at once and wins on conflict.",
         )
 
-        # Phase 4b convenience flags. Each maps to a single phase of the
+        # Per-phase convenience flags. Each maps to a single phase of the
         # canonical ``cuda_graph_mode`` dict. ``cuda-graph-mode`` JSON wins
         # on conflict; a warning is emitted naming both.
         _BACKEND_CHOICES = ("full", "breakable", "tcpcg", "disabled")

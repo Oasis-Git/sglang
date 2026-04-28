@@ -562,9 +562,8 @@ class DeepseekMLAForwardMixin:
             if torch.compiler.is_compiling():
                 # Dynamo requires the out= form when the output tensor is
                 # non-contiguous; this constraint only applies during
-                # compile (cg-refactor bucket-C narrowing per plan §6.5).
-                # Replay uses the standard ``out=`` form below since
-                # dynamo is no longer tracing.
+                # compile. Replay uses the standard ``out=`` form below
+                # since dynamo is no longer tracing.
                 attn_bmm_output = (
                     torch.bmm(attn_output.transpose(0, 1), self.w_vc)
                     .transpose(0, 1)
