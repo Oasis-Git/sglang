@@ -125,13 +125,11 @@ from sglang.srt.managers.schedule_batch import sanity_check_mm_pad_shift_value
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
 from sglang.srt.compilation.torch_compile_decoration import set_torch_compile_config
-from sglang.srt.model_executor.breakable_cuda_graph_runner import (
-    BreakableCudaGraphRunner,
-)
 from sglang.srt.model_executor.cpu_graph_runner import CPUGraphRunner
 from sglang.srt.model_executor.cuda_graph_runner import (
     DecodeCudaGraphRunner,
     DecodeInputBuffers,
+    PrefillCudaGraphRunner,
 )
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
@@ -142,9 +140,6 @@ from sglang.srt.model_executor.forward_batch_info import (
 from sglang.srt.model_executor.hook_manager import register_forward_hooks
 from sglang.srt.model_executor.model_runner_kv_cache_mixin import (
     ModelRunnerKVCacheMixin,
-)
-from sglang.srt.model_executor.piecewise_cuda_graph_runner import (
-    PiecewiseCudaGraphRunner,
 )
 from sglang.srt.model_executor.pool_configurator import MemoryPoolConfig
 from sglang.srt.model_loader.loader import DefaultModelLoader, get_model_loader
@@ -2762,10 +2757,6 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         before_mem = get_available_gpu_memory(self.device, self.gpu_id)
         logger.info(
             f"Capture piecewise CUDA graph begin. avail mem={before_mem:.2f} GB"
-        )
-
-        from sglang.srt.model_executor.cuda_graph_runner.prefill_runner import (
-            PrefillCudaGraphRunner,
         )
 
         self.piecewise_cuda_graph_runner = PrefillCudaGraphRunner(self)

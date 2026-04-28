@@ -15,6 +15,7 @@ Today's three implementations:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -70,3 +71,12 @@ class BaseCudaGraphBackend(ABC):
 
     @abstractmethod
     def cleanup(self) -> None: ...
+
+    @contextmanager
+    def runtime_session(self):
+        """Context wrapping replay-time model code. Sets per-backend
+        global flags (``is_in_*_cuda_graph``) so model code takes the
+        static-buffer / fixed-shape path. Default: no-op (Full doesn't
+        set any flag).
+        """
+        yield

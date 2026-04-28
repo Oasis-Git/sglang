@@ -49,6 +49,7 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
         self._outputs: Dict[Any, Any] = {}
         self._pool = None
         self._device_module = None
+        self._tp_group = None
         self._memory_saver_adapter: Optional[Any] = None
         self._capture_stream: Optional[torch.cuda.Stream] = None
         self._enable_memory_saver = enable_memory_saver
@@ -56,6 +57,7 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
 
     def prepare(self, runner) -> None:
         self._device_module = runner.device_module
+        self._tp_group = runner.model_runner.tp_group
         self._memory_saver_adapter = TorchMemorySaverAdapter.create(
             enable=self._enable_memory_saver
             and get_bool_env_var("SGLANG_MEMORY_SAVER_CUDA_GRAPH")
@@ -72,13 +74,23 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
         return True
 
     @contextmanager
+    def runtime_session(self):
+        from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph import (
+            enable_breakable_cuda_graph,
+        )
+
+        with enable_breakable_cuda_graph():
+            yield
+
+    @contextmanager
     def capture_session(self, stream: torch.cuda.Stream):
         if self._pool is None:
             self._pool = self._device_module.graph_pool_handle()
         set_graph_pool_id(self._pool)
         self._capture_stream = stream
         try:
-            yield
+            with self.runtime_session():
+                yield
         finally:
             self._capture_stream = None
 
@@ -88,6 +100,12 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
         forward_fn: Callable[[], Any],
         dummies: Optional[Any] = None,
     ) -> None:
+        # Two jit warmups, then capture under BreakableCUDAGraphCapture.
+        for _ in range(2):
+            self._device_module.synchronize()
+            self._tp_group.barrier()
+            forward_fn()
+
         graph = BreakableCUDAGraph()
         captured_fn = (
             eager_on_graph(True)(forward_fn) if self._debug_eager else forward_fn

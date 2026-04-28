@@ -40,12 +40,14 @@ class FullCudaGraphBackend(BaseCudaGraphBackend):
         self._outputs: Dict[Any, Any] = {}
         self._pool = None
         self._device_module = None
+        self._tp_group = None
         self._memory_saver_adapter: Optional[Any] = None
         self._capture_stream: Optional[torch.cuda.Stream] = None
         self._enable_memory_saver = enable_memory_saver
 
     def prepare(self, runner) -> None:
         self._device_module = runner.device_module
+        self._tp_group = runner.model_runner.tp_group
         self._memory_saver_adapter = TorchMemorySaverAdapter.create(
             enable=self._enable_memory_saver
             and get_bool_env_var("SGLANG_MEMORY_SAVER_CUDA_GRAPH")
@@ -75,6 +77,14 @@ class FullCudaGraphBackend(BaseCudaGraphBackend):
         forward_fn: Callable[[], Any],
         dummies: Optional[Any] = None,
     ) -> None:
+        # Two jit warmups so kernels stay loaded and any one-time setup
+        # cost is paid before the actual capture; then capture under
+        # the cuda-graph context.
+        for _ in range(2):
+            self._device_module.synchronize()
+            self._tp_group.barrier()
+            forward_fn()
+
         graph = torch.cuda.CUDAGraph()
 
         graph_ctx: Callable[..., AbstractContextManager]

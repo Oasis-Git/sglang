@@ -719,12 +719,6 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                 self.buffers.out_cache_loc_swa[:num_tokens]
             )
 
-        # Warmup runs (twice). Capture happens via backend.capture_one().
-        for _ in range(2):
-            self.device_module.synchronize()
-            self.model_runner.tp_group.barrier()
-            run_once()
-
         shape_key = self._make_graph_key(bs, stream_idx, variant_label)
         self.backend.capture_one(shape_key, run_once, dummies=None)
 
@@ -871,7 +865,8 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         # Full/Breakable backends it's unused (replay against static
         # buffers in place); for tcpcg-decode (not yet implemented) it
         # would feed args to the compiled callable.
-        output = self.backend.replay(graph_key, forward_batch)
+        with self.backend.runtime_session():
+            output = self.backend.replay(graph_key, forward_batch)
 
         if isinstance(output, LogitsProcessorOutput):
             if self.is_dllm:
