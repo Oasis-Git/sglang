@@ -565,6 +565,7 @@ class CudaGraphRunner:
         attn_backend=None,
         speculative_num_steps: Optional[int] = None,
         speculative_num_draft_tokens: Optional[int] = None,
+        use_breakable_capture: Optional[bool] = None,
     ):
         # Parse args
         self.model_runner = model_runner
@@ -572,6 +573,15 @@ class CudaGraphRunner:
         self.device_module = torch.get_device_module(self.device)
         self.graphs = {}
         self.output_buffers = {}
+        # Phase 3b/c (partial): replaces the env-var read inside
+        # ``_create_device_graph`` / ``_capture_graph`` with a constructor
+        # parameter, driven by the ``DecodeCudaGraphRunner`` factory off
+        # ``cuda_graph_mode["decode"]``. The env var
+        # ``SGLANG_USE_BREAKABLE_CUDA_GRAPH`` remains as a fallback for
+        # users who set it directly.
+        if use_breakable_capture is None:
+            use_breakable_capture = envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get()
+        self.use_breakable_capture = use_breakable_capture
         self.enable_torch_compile = model_runner.server_args.enable_torch_compile
         self.disable_padding = model_runner.server_args.disable_cuda_graph_padding
         self.is_encoder_decoder = model_runner.model_config.is_encoder_decoder
@@ -910,7 +920,7 @@ class CudaGraphRunner:
     def _capture_graph(self, graph, pool, stream, run_once_fn):
         if self.model_runner.server_args.debug_cuda_graph:
             assert (
-                envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get()
+                self.use_breakable_capture
             ), "Breakable CUDA graph is not enabled in debug mode"
 
         memory_saver_adapter = TorchMemorySaverAdapter.create(
@@ -918,7 +928,7 @@ class CudaGraphRunner:
             and get_bool_env_var("SGLANG_MEMORY_SAVER_CUDA_GRAPH")
         )
 
-        if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
+        if self.use_breakable_capture:
             # Breakable CUDA graph path — Phase 2c: delegate to
             # BreakableCudaGraphBackend.
             from sglang.srt.model_executor.cuda_graph_backend.breakable import (
@@ -949,7 +959,7 @@ class CudaGraphRunner:
         )
 
     def _create_device_graph(self):
-        if envs.SGLANG_USE_BREAKABLE_CUDA_GRAPH.get():
+        if self.use_breakable_capture:
             # Phase 2c: delegate to BreakableCudaGraphBackend (HIP guard
             # moves into the backend's make_graph).
             from sglang.srt.model_executor.cuda_graph_backend.breakable import (

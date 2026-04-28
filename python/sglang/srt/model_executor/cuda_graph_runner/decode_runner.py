@@ -23,7 +23,6 @@ unchanged.
 from __future__ import annotations
 
 import logging
-import os
 from typing import TYPE_CHECKING
 
 from sglang.srt.model_executor.cuda_graph_runner.legacy import CudaGraphRunner
@@ -57,12 +56,8 @@ class DecodeCudaGraphRunner:
         mode = model_runner.server_args.cuda_graph_mode or {}
         backend = mode.get(PHASE_DECODE, BACKEND_FULL)
 
-        if backend == BACKEND_BREAKABLE:
-            # Bridge to the env-var path inside CudaGraphRunner. Phase 5
-            # avoids touching that path's logic; Phase 3b/c will replace
-            # the env-var read with a constructor parameter.
-            os.environ["SGLANG_USE_BREAKABLE_CUDA_GRAPH"] = "1"
-        elif backend == BACKEND_TCPCG:
+        use_breakable_capture = backend == BACKEND_BREAKABLE
+        if backend == BACKEND_TCPCG:
             global _TCPCG_DECODE_FALLBACK_LOGGED
             if not _TCPCG_DECODE_FALLBACK_LOGGED:
                 logger.warning(
@@ -71,6 +66,7 @@ class DecodeCudaGraphRunner:
                     "tcpcg into the decode runner in refactor/progress.md."
                 )
                 _TCPCG_DECODE_FALLBACK_LOGGED = True
-        # BACKEND_FULL: nothing to do.
 
-        return CudaGraphRunner(model_runner)
+        return CudaGraphRunner(
+            model_runner, use_breakable_capture=use_breakable_capture
+        )
