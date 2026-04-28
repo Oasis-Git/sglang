@@ -4,9 +4,6 @@ from typing import TYPE_CHECKING, Optional
 
 import torch
 
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    is_in_cuda_graph_capture,
-)
 from sglang.srt.layers import deep_gemm_wrapper
 from sglang.srt.layers.attention.nsa.utils import nsa_use_prefill_cp
 from sglang.srt.layers.communicator import get_attn_tp_context
@@ -562,13 +559,12 @@ class DeepseekMLAForwardMixin:
             )
             attn_bmm_output = attn_bmm_output.transpose(0, 1).flatten(1, 2)
         else:
-            if is_in_cuda_graph_capture():
-                # TODO(cg-refactor): bucket-C candidate — the genuine
-                # constraint is dynamo's "out= op required when output is
-                # non-contiguous" rule, which only fires during compile,
-                # not replay. Switch to ``torch.compiler.is_compiling()``
-                # once we verify replay tolerates the contiguous-output
-                # form. Tracking in plan §6.5 audit rule.
+            if torch.compiler.is_compiling():
+                # Dynamo requires the out= form when the output tensor is
+                # non-contiguous; this constraint only applies during
+                # compile (cg-refactor bucket-C narrowing per plan §6.5).
+                # Replay uses the standard ``out=`` form below since
+                # dynamo is no longer tracing.
                 attn_bmm_output = (
                     torch.bmm(attn_output.transpose(0, 1), self.w_vc)
                     .transpose(0, 1)

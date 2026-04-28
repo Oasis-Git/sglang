@@ -224,13 +224,12 @@ class NemotronHMoE(nn.Module):
         self,
         hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # torch.compile cannot trace CUDA streams, so use the non-overlapping
-        # path when inside piecewise CUDA graph compilation.
-        # TODO(cg-refactor): bucket-C candidate — the genuine constraint is
-        # dynamo tracing, not capture-or-replay. Switch to
-        # ``torch.compiler.is_compiling()`` once we verify that replay
-        # tolerates the overlapping path. Tracking in plan §6.5 audit rule.
-        if _is_cuda and not is_in_cuda_graph_capture():
+        # torch.compile cannot trace CUDA streams. Gate the overlapping
+        # path on ``torch.compiler.is_compiling()`` (cg-refactor bucket-C
+        # narrowing per plan §6.5): only avoid the overlap during dynamo
+        # tracing; replay can use the overlapping fast path since dynamo
+        # is no longer active.
+        if _is_cuda and not torch.compiler.is_compiling():
             return self._forward_core_shared_routed_overlap(hidden_states)
         else:
             return self._forward_core_normal(hidden_states)
