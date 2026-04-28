@@ -10,7 +10,7 @@ the same way as for non-cuda-graph forward paths.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import torch
 
@@ -308,3 +308,121 @@ class PrefillInputBuffers(ForwardInputBuffers):
     positions: torch.Tensor
     input_embeds: Optional[torch.Tensor]
     mrope_positions: Optional[torch.Tensor]
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        device: torch.device,
+        max_bs: int,
+        max_num_tokens: int,
+        cache_loc_dtype: torch.dtype,
+        is_hybrid_swa: bool,
+        is_multimodal: bool,
+        hidden_size: int,
+        dtype: torch.dtype,
+        enable_mamba_track: bool,
+    ) -> "PrefillInputBuffers":
+        with torch.device(device):
+            input_ids = torch.zeros((max_num_tokens,), dtype=torch.int64)
+            out_cache_loc = torch.zeros((max_num_tokens,), dtype=cache_loc_dtype)
+            out_cache_loc_swa = (
+                torch.zeros((max_num_tokens,), dtype=torch.int64)
+                if is_hybrid_swa
+                else None
+            )
+            mamba_track_indices = (
+                torch.zeros((max_bs,), dtype=torch.int64)
+                if enable_mamba_track
+                else None
+            )
+            mamba_track_mask = (
+                torch.zeros((max_bs,), dtype=torch.bool) if enable_mamba_track else None
+            )
+            mamba_track_seqlens = (
+                torch.zeros((max_bs,), dtype=torch.int32)
+                if enable_mamba_track
+                else None
+            )
+            positions = torch.zeros((max_num_tokens,), dtype=torch.int64)
+
+            if is_multimodal:
+                input_embeds = torch.zeros(
+                    (max_num_tokens, hidden_size), dtype=dtype
+                )
+                mrope_positions = torch.zeros((3, max_num_tokens), dtype=torch.int64)
+            else:
+                input_embeds = None
+                mrope_positions = None
+
+        return cls(
+            input_ids=input_ids,
+            out_cache_loc=out_cache_loc,
+            out_cache_loc_swa=out_cache_loc_swa,
+            mamba_track_indices=mamba_track_indices,
+            mamba_track_mask=mamba_track_mask,
+            mamba_track_seqlens=mamba_track_seqlens,
+            positions=positions,
+            input_embeds=input_embeds,
+            mrope_positions=mrope_positions,
+        )
+
+    def populate_from_forward_batch(
+        self,
+        *,
+        forward_batch: ForwardBatch,
+        raw_num_tokens: int,
+        static_num_tokens: int,
+        is_multimodal: bool,
+        swa_translator: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+    ) -> None:
+        """Copy serving-batch values into static buffers and zero out
+        the padding region between ``raw_num_tokens`` and
+        ``static_num_tokens``.
+
+        ``swa_translator`` is required when ``out_cache_loc_swa`` is
+        present; it converts the full-cache loc tensor into SWA-cache
+        coordinates.
+        """
+        if static_num_tokens != raw_num_tokens:
+            self.out_cache_loc.zero_()
+            if self.out_cache_loc_swa is not None:
+                self.out_cache_loc_swa.zero_()
+            self.input_ids[raw_num_tokens:static_num_tokens].zero_()
+            self.positions[raw_num_tokens:static_num_tokens].zero_()
+            if is_multimodal:
+                self.input_embeds[raw_num_tokens:static_num_tokens].zero_()
+            if forward_batch.mrope_positions is not None:
+                self.mrope_positions[:, raw_num_tokens:static_num_tokens].zero_()
+
+        bs = forward_batch.batch_size
+
+        self.input_ids[:raw_num_tokens].copy_(forward_batch.input_ids)
+        self.positions[:raw_num_tokens].copy_(forward_batch.positions)
+        self.out_cache_loc[:raw_num_tokens].copy_(forward_batch.out_cache_loc)
+        if self.out_cache_loc_swa is not None:
+            assert swa_translator is not None
+            self.out_cache_loc_swa[:raw_num_tokens].copy_(
+                swa_translator(forward_batch.out_cache_loc)
+            )
+
+        if (
+            self.mamba_track_indices is not None
+            and forward_batch.mamba_track_indices is not None
+        ):
+            self.mamba_track_indices[:bs].copy_(forward_batch.mamba_track_indices)
+        if (
+            self.mamba_track_mask is not None
+            and forward_batch.mamba_track_mask is not None
+        ):
+            self.mamba_track_mask[:bs].copy_(forward_batch.mamba_track_mask)
+        if (
+            self.mamba_track_seqlens is not None
+            and forward_batch.mamba_track_seqlens is not None
+        ):
+            self.mamba_track_seqlens[:bs].copy_(forward_batch.mamba_track_seqlens)
+
+        if forward_batch.mrope_positions is not None:
+            self.mrope_positions[:, :raw_num_tokens].copy_(
+                forward_batch.mrope_positions
+            )

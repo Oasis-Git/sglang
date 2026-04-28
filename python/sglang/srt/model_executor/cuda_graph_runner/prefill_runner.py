@@ -27,7 +27,6 @@ Backend selection comes from ``cuda_graph_mode["prefill"]``:
 
 from __future__ import annotations
 
-import bisect
 import logging
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -35,23 +34,17 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 import torch
 import tqdm
 
-from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
 from sglang.srt.distributed import get_tensor_model_parallel_rank
 from sglang.srt.distributed.parallel_state import graph_capture
 from sglang.srt.layers.dp_attention import (
     DpPaddingMode,
-    get_attention_tp_rank,
-    get_attention_tp_size,
     set_dp_buffer_len,
     set_is_extend_in_batch,
 )
 from sglang.srt.layers.logits_processor import LogitsProcessorOutput
 from sglang.srt.layers.pooler import EmbeddingPoolerOutput
-from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
-    BreakableCudaGraphBackend,
-)
-from sglang.srt.model_executor.cuda_graph_backend.tcpcg_cudagraph_backend import (
-    TCPiecewiseCudaGraphBackend,
+from sglang.srt.model_executor.cuda_graph_backend.factory import (
+    resolve_prefill_backend,
 )
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
     set_forward_context,
@@ -77,26 +70,6 @@ if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner
 
 
-def _resolve_prefill_backend(model_runner: "ModelRunner"):
-    """Pick a backend instance from cuda_graph_mode['prefill']."""
-    from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
-        BACKEND_BREAKABLE,
-        BACKEND_TCPCG,
-        PHASE_PREFILL,
-    )
-
-    mode = model_runner.server_args.cuda_graph_mode or {}
-    backend_name = mode.get(PHASE_PREFILL, BACKEND_TCPCG)
-
-    if backend_name == BACKEND_BREAKABLE:
-        return BreakableCudaGraphBackend(
-            enable_memory_saver=model_runner.server_args.enable_memory_saver,
-            debug_eager=model_runner.server_args.debug_cuda_graph,
-        )
-    # Default: tcpcg.
-    return TCPiecewiseCudaGraphBackend()
-
-
 class PrefillCudaGraphRunner(BaseCudaGraphRunner):
     """Prefill-phase CUDA graph runner.
 
@@ -107,17 +80,8 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
     """
 
     def __init__(self, model_runner: "ModelRunner"):
+        super().__init__(model_runner)
         # --- core state ------------------------------------------------
-        self.model_runner = model_runner
-        self.device = model_runner.device
-        self.device_module = torch.get_device_module(self.device)
-        self.tp_size = model_runner.server_args.tp_size
-        self.dp_size = model_runner.server_args.dp_size
-        self.pp_size = model_runner.server_args.pp_size
-
-        self.attn_tp_size = get_attention_tp_size()
-        self.attn_tp_rank = get_attention_tp_rank()
-
         self.quant_config = getattr(self.model_runner.model, "quant_config", None)
         self.is_multimodal = model_runner.is_multimodal
         # Classification/reward forwards branch on return_pooled_hidden_states;
@@ -145,85 +109,29 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
         self.mamba_track_enabled = self._is_mamba_track_enabled()
 
         # --- buffers ---------------------------------------------------
-        with torch.device(self.device):
-            input_ids = torch.zeros((self.max_num_tokens,), dtype=torch.int64)
-            out_cache_loc = torch.zeros(
-                (self.max_num_tokens,), dtype=self._cache_loc_dtype()
-            )
-            out_cache_loc_swa = (
-                torch.zeros((self.max_num_tokens,), dtype=torch.int64)
-                if model_runner.is_hybrid_swa
-                else None
-            )
-            mamba_track_indices = (
-                torch.zeros((self.max_bs,), dtype=torch.int64)
-                if self.mamba_track_enabled
-                else None
-            )
-            mamba_track_mask = (
-                torch.zeros((self.max_bs,), dtype=torch.bool)
-                if self.mamba_track_enabled
-                else None
-            )
-            mamba_track_seqlens = (
-                torch.zeros((self.max_bs,), dtype=torch.int32)
-                if self.mamba_track_enabled
-                else None
-            )
-            positions = torch.zeros((self.max_num_tokens,), dtype=torch.int64)
-
-            if self.is_multimodal:
-                input_embeds = torch.zeros(
-                    (self.max_num_tokens, self.model_runner.model_config.hidden_size),
-                    dtype=self.model_runner.dtype,
-                )
-                mrope_positions = torch.zeros(
-                    (3, self.max_num_tokens), dtype=torch.int64
-                )
-            else:
-                input_embeds = None
-                mrope_positions = None
-
-        self.buffers = PrefillInputBuffers(
-            input_ids=input_ids,
-            out_cache_loc=out_cache_loc,
-            out_cache_loc_swa=out_cache_loc_swa,
-            mamba_track_indices=mamba_track_indices,
-            mamba_track_mask=mamba_track_mask,
-            mamba_track_seqlens=mamba_track_seqlens,
-            positions=positions,
-            input_embeds=input_embeds,
-            mrope_positions=mrope_positions,
+        self.buffers: PrefillInputBuffers = PrefillInputBuffers.create(
+            device=self.device,
+            max_bs=self.max_bs,
+            max_num_tokens=self.max_num_tokens,
+            cache_loc_dtype=self._cache_loc_dtype(),
+            is_hybrid_swa=model_runner.is_hybrid_swa,
+            is_multimodal=self.is_multimodal,
+            hidden_size=self.model_runner.model_config.hidden_size,
+            dtype=self.model_runner.dtype,
+            enable_mamba_track=self.mamba_track_enabled,
         )
         self.buffers.share_buffers()
-
-        self.tbo_plugin = TboCudaGraphRunnerPlugin()
 
         self.attention_layers = self.model_runner.attention_layers
         self.moe_layers = self.model_runner.moe_layers
         self.moe_fusions = self.model_runner.moe_fusions
 
-        # --- BCG-only static buffers (used when backend is Breakable) -
-        # The Breakable backend's segments read from these buffers during
-        # replay; allocate even when the active backend is tcpcg (cost
-        # is trivial — a few int64 tensors of length max_bs).
-        with torch.device(self.device):
-            self.static_seq_lens = torch.zeros((self.max_bs,), dtype=torch.int64)
-            self.static_extend_seq_lens = torch.zeros((self.max_bs,), dtype=torch.int64)
-            self.static_extend_prefix_lens = torch.zeros(
-                (self.max_bs,), dtype=torch.int64
-            )
-            self.static_extend_start_loc = torch.zeros(
-                (self.max_bs,), dtype=torch.int64
-            )
-            self.static_req_pool_indices = torch.zeros(
-                (self.max_bs,), dtype=torch.int64
-            )
-            self.static_orig_seq_lens = torch.zeros((self.max_bs,), dtype=torch.int64)
-
         # --- backend ---------------------------------------------------
-        self.backend = _resolve_prefill_backend(model_runner)
-        self._is_breakable_backend = isinstance(self.backend, BreakableCudaGraphBackend)
+        # Backends needing stable addresses for captured prefill segments
+        # (today: only BCG) allocate their own static buffers in
+        # ``setup_prefill_state``. Other backends no-op.
+        self.backend = resolve_prefill_backend(model_runner)
+        self.backend.setup_prefill_state(self)
         self.backend.prepare(self)
 
         # --- capture --------------------------------------------------
@@ -249,36 +157,25 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
     def _build_capture_forward_batch(self, num_tokens: int) -> ForwardBatch:
         """Build a dummy prefill ForwardBatch for capture/warmup at this shape.
 
-        For the Breakable backend, fills the static_* buffers so the
-        captured graph segments read from stable addresses. For tcpcg
-        these are unused.
+        Default tensor inputs are fresh literals; backends that need
+        stable addresses for captured segments (BCG) override via
+        ``populate_prefill_dummy_inputs`` to swap in static buffers.
         """
         buffers = self.buffers
         bs = 1
 
-        if self._is_breakable_backend:
-            self.static_seq_lens[:bs].fill_(num_tokens)
-            self.static_extend_seq_lens[:bs].fill_(num_tokens)
-            self.static_extend_prefix_lens[:bs].zero_()
-            self.static_extend_start_loc[:bs].zero_()
-            self.static_req_pool_indices[:bs].copy_(
-                torch.arange(bs, device=self.device)
-            )
-            self.static_orig_seq_lens[:bs].fill_(num_tokens)
-            req_pool_indices = self.static_req_pool_indices[:bs]
-            seq_lens = self.static_seq_lens[:bs]
-            orig_seq_lens = self.static_orig_seq_lens[:bs]
-            extend_seq_lens = self.static_extend_seq_lens[:bs]
-            extend_prefix_lens = self.static_extend_prefix_lens[:bs]
-            extend_start_loc = self.static_extend_start_loc[:bs]
-        else:
-            with torch.device(self.device):
-                req_pool_indices = torch.arange(bs, device=self.device)
-                seq_lens = torch.tensor([num_tokens], device=self.device)
-                orig_seq_lens = torch.tensor([num_tokens], device=self.device)
-                extend_seq_lens = torch.tensor([num_tokens], device=self.device)
-                extend_prefix_lens = torch.tensor([0], device=self.device)
-                extend_start_loc = torch.tensor([0], device=self.device)
+        with torch.device(self.device):
+            shape_inputs = {
+                "req_pool_indices": torch.arange(bs, device=self.device),
+                "seq_lens": torch.tensor([num_tokens], device=self.device),
+                "orig_seq_lens": torch.tensor([num_tokens], device=self.device),
+                "extend_seq_lens": torch.tensor([num_tokens], device=self.device),
+                "extend_prefix_lens": torch.tensor([0], device=self.device),
+                "extend_start_loc": torch.tensor([0], device=self.device),
+            }
+        self.backend.populate_prefill_dummy_inputs(
+            shape_inputs, bs=bs, num_tokens=num_tokens
+        )
 
         with torch.device(self.device):
             forward_batch = ForwardBatch(
@@ -288,10 +185,10 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 input_embeds=(
                     buffers.input_embeds[:num_tokens] if self.is_multimodal else None
                 ),
-                req_pool_indices=req_pool_indices,
-                seq_lens=seq_lens,
+                req_pool_indices=shape_inputs["req_pool_indices"],
+                seq_lens=shape_inputs["seq_lens"],
                 next_token_logits_buffer=None,
-                orig_seq_lens=orig_seq_lens,
+                orig_seq_lens=shape_inputs["orig_seq_lens"],
                 seq_lens_cpu=torch.tensor([num_tokens], device="cpu"),
                 req_to_token_pool=self.model_runner.req_to_token_pool,
                 token_to_kv_pool=self.model_runner.token_to_kv_pool,
@@ -321,9 +218,9 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 encoder_lens=None,
                 return_logprob=False,
                 extend_num_tokens=num_tokens,
-                extend_seq_lens=extend_seq_lens,
-                extend_prefix_lens=extend_prefix_lens,
-                extend_start_loc=extend_start_loc,
+                extend_seq_lens=shape_inputs["extend_seq_lens"],
+                extend_prefix_lens=shape_inputs["extend_prefix_lens"],
+                extend_start_loc=shape_inputs["extend_start_loc"],
                 extend_prefix_lens_cpu=torch.tensor([0], device="cpu"),
                 extend_seq_lens_cpu=torch.tensor([num_tokens], device="cpu"),
                 extend_logprob_start_lens_cpu=torch.tensor([num_tokens], device="cpu"),
@@ -368,10 +265,12 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 forward_batch,
             )
 
-    def _run_warmup_forward(self, num_tokens: int) -> None:
-        """Used by ``TCPiecewiseCudaGraphBackend.prepare`` during the
-        warmup-compile loop. Builds a dummy ForwardBatch, inits attn
-        metadata, runs forward.
+    def _run_dummy_forward(self, num_tokens: int) -> None:
+        """Build a dummy ForwardBatch at this shape, init attn metadata,
+        run forward once. Used by ``TCPiecewiseCudaGraphBackend.prepare``
+        for both the JIT-activate forward (single shape, before
+        torch.compile install) and the compile-loop pass (every shape,
+        inside ``enable_torch_compile_warmup``).
         """
         fb = self._build_capture_forward_batch(num_tokens)
         self.model_runner.attn_backend.init_forward_metadata(fb)
@@ -381,10 +280,6 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
     # can_run
     # -----------------------------------------------------------------
     def can_run(self, forward_batch: ForwardBatch) -> bool:
-        # BCG-prefill captures bs=1 only — multi-req would silently return
-        # wrong-shaped logits, corrupting downstream output_ids.
-        if self._is_breakable_backend and forward_batch.batch_size > 1:
-            return False
         if forward_batch.input_embeds is not None:
             return False
         if forward_batch.replace_embeds is not None:
@@ -404,6 +299,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                     return False
         if num_tokens > self.max_num_tokens:
             return False
+        # Backend-level checks (e.g. BCG rejects bs>1 prefill).
         return self.backend.can_run(forward_batch)
 
     # -----------------------------------------------------------------
@@ -460,48 +356,23 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
         """
         buffers = self.buffers
         num_tokens = len(forward_batch.input_ids)
-        index = bisect.bisect_left(self.capture_num_tokens, num_tokens)
-        static_num_tokens = self.capture_num_tokens[index]
+        static_num_tokens = self._pad_to_bucket(num_tokens, self.capture_num_tokens)
         self.raw_num_tokens = num_tokens
-
-        if static_num_tokens != num_tokens:
-            buffers.out_cache_loc.zero_()
-            if buffers.out_cache_loc_swa is not None:
-                buffers.out_cache_loc_swa.zero_()
-            buffers.input_ids[num_tokens:static_num_tokens].zero_()
-            buffers.positions[num_tokens:static_num_tokens].zero_()
-            if self.is_multimodal:
-                buffers.input_embeds[num_tokens:static_num_tokens].zero_()
-            if forward_batch.mrope_positions is not None:
-                buffers.mrope_positions[:, num_tokens:static_num_tokens].zero_()
 
         bs = forward_batch.batch_size
 
-        buffers.input_ids[:num_tokens].copy_(forward_batch.input_ids)
-        buffers.positions[:num_tokens].copy_(forward_batch.positions)
-        buffers.out_cache_loc[:num_tokens].copy_(forward_batch.out_cache_loc)
-        if buffers.out_cache_loc_swa is not None:
-            buffers.out_cache_loc_swa[: self.raw_num_tokens].copy_(
-                self.model_runner.token_to_kv_pool_allocator.translate_loc_from_full_to_swa(
-                    forward_batch.out_cache_loc
-                )
-            )
-
-        if (
-            buffers.mamba_track_indices is not None
-            and forward_batch.mamba_track_indices is not None
-        ):
-            buffers.mamba_track_indices[:bs].copy_(forward_batch.mamba_track_indices)
-        if (
-            buffers.mamba_track_mask is not None
-            and forward_batch.mamba_track_mask is not None
-        ):
-            buffers.mamba_track_mask[:bs].copy_(forward_batch.mamba_track_mask)
-        if (
-            buffers.mamba_track_seqlens is not None
-            and forward_batch.mamba_track_seqlens is not None
-        ):
-            buffers.mamba_track_seqlens[:bs].copy_(forward_batch.mamba_track_seqlens)
+        swa_translator = (
+            self.model_runner.token_to_kv_pool_allocator.translate_loc_from_full_to_swa
+            if buffers.out_cache_loc_swa is not None
+            else None
+        )
+        buffers.populate_from_forward_batch(
+            forward_batch=forward_batch,
+            raw_num_tokens=num_tokens,
+            static_num_tokens=static_num_tokens,
+            is_multimodal=self.is_multimodal,
+            swa_translator=swa_translator,
+        )
 
         out_cache_loc_swa = (
             buffers.out_cache_loc_swa[:static_num_tokens]
@@ -524,8 +395,6 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
             if buffers.mamba_track_seqlens is not None
             else None
         )
-        if forward_batch.mrope_positions is not None:
-            buffers.mrope_positions[:, :num_tokens].copy_(forward_batch.mrope_positions)
 
         input_ids = buffers.input_ids[:static_num_tokens]
         input_embeds = (
@@ -610,16 +479,10 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
         if out_cache_loc_swa is not None:
             self.model_runner.token_to_kv_pool.set_swa_loc(out_cache_loc_swa)
 
-        # BCG-prefill: copy serving-time values into static_* buffers so
-        # captured segments (which read from these addresses) see them.
-        if self._is_breakable_backend:
-            self.static_seq_lens[:bs].copy_(forward_batch.seq_lens)
-            self.static_extend_seq_lens[:bs].copy_(forward_batch.extend_seq_lens)
-            self.static_extend_prefix_lens[:bs].copy_(forward_batch.extend_prefix_lens)
-            self.static_extend_start_loc[:bs].copy_(forward_batch.extend_start_loc)
-            self.static_req_pool_indices[:bs].copy_(forward_batch.req_pool_indices)
-            if forward_batch.orig_seq_lens is not None:
-                self.static_orig_seq_lens[:bs].copy_(forward_batch.orig_seq_lens)
+        # Backends that need stable addresses for captured segments
+        # (BCG) commit serving-time values into their static buffers.
+        # Other backends no-op.
+        self.backend.commit_prefill_serving_inputs(forward_batch)
 
         self._static_num_tokens = static_num_tokens
         return static_forward_batch

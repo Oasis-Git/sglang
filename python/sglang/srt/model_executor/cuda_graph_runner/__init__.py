@@ -1,11 +1,15 @@
 """Phase-aware CUDA graph runners.
 
+One concrete runner per phase. Each runner owns its phase-specific
+shape semantics (decode → batch size; prefill → token count) and
+delegates capture/replay mechanics to a pluggable
+``BaseCudaGraphBackend`` chosen via ``cuda_graph_mode``.
+
 Public API:
-  - ``BaseCudaGraphRunner`` — abstract base.
+  - ``BaseCudaGraphRunner`` — abstract base; shared init + bucket
+    padding + capture-loop scaffolding.
   - ``DecodeCudaGraphRunner`` — concrete decode-phase runner.
-  - ``PrefillCudaGraphRunner`` — prefill-phase factory (for now still
-    selecting between the legacy BCG / PCG runners; will be lifted into
-    a real concrete runner in Phase F).
+  - ``PrefillCudaGraphRunner`` — concrete prefill-phase runner.
   - Helpers re-exported for the EAGLE / multi-step draft cuda graph
     runners that were authored against the legacy public surface.
 """

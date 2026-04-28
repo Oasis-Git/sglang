@@ -1,10 +1,16 @@
-"""torch.compile decoration helpers for the legacy ``--enable-torch-compile``
-flag (decode-Full + torch.compile path).
+"""torch.compile decoration helpers used by the decode-Full path under
+``--enable-torch-compile``.
 
-Callers wrap the model forward with :func:`patch_model` during cuda graph
-capture; the contextmanager produces either ``torch.compile(...)``-wrapped
-forward or the raw forward, depending on whether the current bs is in
-the compile bucket list.
+``patch_model`` wraps the model forward with ``torch.compile`` for batch
+sizes that fall in the compile bucket list and returns the raw forward
+otherwise. ``set_torch_compile_config`` flips the inductor/dynamo config
+flags expected by that path.
+
+Note: the prefill-tcpcg path (``TCPiecewiseCudaGraphBackend``) does NOT
+use ``patch_model`` — it goes through ``compilation/compile.py``'s
+``install_torch_compiled``. ``_to_torch`` here is duplicated by
+tcpcg's local ``_toggle_multi_platform_ops``; the duplication is kept
+because the two paths have different lifecycle requirements.
 """
 
 from __future__ import annotations

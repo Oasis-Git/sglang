@@ -4,21 +4,37 @@ The phase-specific subclasses (``DecodeCudaGraphRunner``,
 ``PrefillCudaGraphRunner``) own their own buffer dataclasses, capture
 forward-mode, and ``can_run`` logic. This base contributes:
 
-- ``freeze_gc`` — gc-freeze context used during capture
-- ``get_batch_sizes_to_capture`` — bucket-sizing helper for decode
-- abstract methods describing the contract a phase runner must fulfil
+- Shared ``__init__`` fields (model_runner, device, parallel sizes,
+  attn-tp coordinates, tbo plugin).
+- ``freeze_gc`` — gc-freeze context used during capture.
+- ``get_batch_sizes_to_capture`` — bucket-sizing helper for decode.
+- ``_pad_to_bucket`` — shared bisect-bucket lookup with a clear-fail
+  assertion (the runner's ``can_run`` is responsible for ensuring the
+  raw size fits within the bucket list).
+- abstract methods describing the contract a phase runner must fulfil.
 """
 
 from __future__ import annotations
 
+import bisect
 import gc
 import logging
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+
+import torch
+
+from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
+from sglang.srt.layers.dp_attention import (
+    get_attention_tp_rank,
+    get_attention_tp_size,
+)
 
 if TYPE_CHECKING:
+    from sglang.srt.model_executor.cuda_graph_backend.base import BaseCudaGraphBackend
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
+    from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
     from sglang.srt.model_executor.model_runner import ModelRunner
 
 logger = logging.getLogger(__name__)
@@ -98,8 +114,57 @@ class BaseCudaGraphRunner(ABC):
     static buffer population, attention metadata init, replay dispatch,
     and output slicing. The backend handles only "given a populated
     forward_batch, run the captured artifact for this shape".
+
+    Concrete state populated here (subclasses extend):
+      - ``self.model_runner`` — back-reference to ModelRunner.
+      - ``self.device``, ``self.device_module`` — device handle.
+      - ``self.tp_size``, ``self.dp_size``, ``self.pp_size``,
+        ``self.attn_tp_size``, ``self.attn_tp_rank`` — parallelism.
+      - ``self.tbo_plugin`` — two-batch-overlap plugin.
+      - ``self.buffers`` — phase-specific input buffers (assigned by
+        subclass before ``capture()``).
+      - ``self.backend`` — pluggable ``BaseCudaGraphBackend`` (assigned
+        by subclass).
     """
 
+    # Subclasses populate before calling ``capture``.
+    buffers: "ForwardInputBuffers"
+    backend: "BaseCudaGraphBackend"
+
+    def __init__(self, model_runner: "ModelRunner") -> None:
+        self.model_runner = model_runner
+        self.device = model_runner.device
+        self.device_module = torch.get_device_module(self.device)
+        self.tp_size = model_runner.server_args.tp_size
+        self.dp_size = model_runner.server_args.dp_size
+        self.pp_size = model_runner.server_args.pp_size
+        self.attn_tp_size = get_attention_tp_size()
+        self.attn_tp_rank = get_attention_tp_rank()
+        self.tbo_plugin = TboCudaGraphRunnerPlugin()
+
+    # -----------------------------------------------------------------
+    # Helpers
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _pad_to_bucket(raw_size: int, buckets: Sequence[int]) -> int:
+        """Return the smallest ``buckets[i] >= raw_size``.
+
+        Caller's ``can_run`` must reject ``raw_size > max(buckets)``
+        before reaching ``replay_prepare`` — this assertion makes the
+        contract explicit. ``bisect_left`` returns ``len(buckets)``
+        when the value exceeds all buckets, which would otherwise
+        IndexError below with no diagnostic.
+        """
+        assert raw_size <= buckets[-1], (
+            f"size {raw_size} exceeds max captured bucket {buckets[-1]}; "
+            f"can_run should have rejected this batch"
+        )
+        index = bisect.bisect_left(buckets, raw_size)
+        return buckets[index]
+
+    # -----------------------------------------------------------------
+    # Abstract contract
+    # -----------------------------------------------------------------
     @abstractmethod
     def can_run(self, forward_batch: "ForwardBatch") -> bool:
         """Decide whether ``forward_batch`` should go through cuda graph

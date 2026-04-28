@@ -25,7 +25,6 @@ Backend selection comes from ``cuda_graph_mode["decode"]``:
 
 from __future__ import annotations
 
-import bisect
 import inspect
 import logging
 from typing import TYPE_CHECKING, Callable, Optional, Union
@@ -34,7 +33,6 @@ import torch
 import tqdm
 from torch.profiler import ProfilerActivity, profile
 
-from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
 from sglang.srt.compilation.torch_compile_decoration import (
     patch_model,
     set_torch_compile_config,
@@ -51,8 +49,6 @@ from sglang.srt.dllm.config import DllmConfig
 from sglang.srt.layers.attention.nsa.utils import is_nsa_enable_prefill_cp
 from sglang.srt.layers.dp_attention import (
     DpPaddingMode,
-    get_attention_tp_rank,
-    get_attention_tp_size,
     set_dp_buffer_len,
     set_is_extend_in_batch,
 )
@@ -61,6 +57,7 @@ from sglang.srt.layers.moe.utils import should_record_nolora_graph
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
     BreakableCudaGraphBackend,
 )
+from sglang.srt.model_executor.cuda_graph_backend.factory import resolve_decode_backend
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
@@ -111,9 +108,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner
 
-_TCPCG_DECODE_FALLBACK_LOGGED = False
-
-
 def _make_graph_key(bs, stream_idx=None, variant_label=None):
     """Build a graph dict key from batch size, stream index, and lora variant.
 
@@ -124,36 +118,6 @@ def _make_graph_key(bs, stream_idx=None, variant_label=None):
     if variant_label is not None:
         key = f"{variant_label}_{key}"
     return key
-
-
-def _resolve_decode_backend(model_runner: "ModelRunner"):
-    """Pick a backend instance from cuda_graph_mode['decode']."""
-    from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
-        BACKEND_BREAKABLE,
-        BACKEND_FULL,
-        BACKEND_TCPCG,
-        PHASE_DECODE,
-    )
-
-    mode = model_runner.server_args.cuda_graph_mode or {}
-    backend_name = mode.get(PHASE_DECODE, BACKEND_FULL)
-
-    enable_memory_saver = model_runner.server_args.enable_memory_saver
-
-    if backend_name == BACKEND_BREAKABLE:
-        return BreakableCudaGraphBackend(
-            enable_memory_saver=enable_memory_saver,
-            debug_eager=model_runner.server_args.debug_cuda_graph,
-        )
-    if backend_name == BACKEND_TCPCG:
-        global _TCPCG_DECODE_FALLBACK_LOGGED
-        if not _TCPCG_DECODE_FALLBACK_LOGGED:
-            logger.warning(
-                "cuda_graph_mode decode='tcpcg' is not yet implemented; "
-                "falling back to 'full'."
-            )
-            _TCPCG_DECODE_FALLBACK_LOGGED = True
-    return FullCudaGraphBackend(enable_memory_saver=enable_memory_saver)
 
 
 class DecodeCudaGraphRunner(BaseCudaGraphRunner):
@@ -172,10 +136,8 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         speculative_num_steps: Optional[int] = None,
         speculative_num_draft_tokens: Optional[int] = None,
     ):
+        super().__init__(model_runner)
         # --- core state ------------------------------------------------
-        self.model_runner = model_runner
-        self.device = model_runner.device
-        self.device_module = torch.get_device_module(self.device)
         self.enable_torch_compile = model_runner.server_args.enable_torch_compile
         self.disable_padding = model_runner.server_args.disable_cuda_graph_padding
         self.is_encoder_decoder = model_runner.model_config.is_encoder_decoder
@@ -193,13 +155,8 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         self.enable_profile_cuda_graph = (
             model_runner.server_args.enable_profile_cuda_graph
         )
-        self.tp_size = model_runner.server_args.tp_size
-        self.dp_size = model_runner.server_args.dp_size
-        self.pp_size = model_runner.server_args.pp_size
         self.enable_pdmux = model_runner.server_args.enable_pdmux
 
-        self.attn_tp_size = get_attention_tp_size()
-        self.attn_tp_rank = get_attention_tp_rank()
         self.nsa_enable_prefill_cp = is_nsa_enable_prefill_cp()
 
         self.deepep_adapter = DeepEPCudaGraphRunnerAdapter()
@@ -303,10 +260,8 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         )
         self.buffers.share_buffers()
 
-        self.tbo_plugin = TboCudaGraphRunnerPlugin()
-
         # --- backend ---------------------------------------------------
-        self.backend = _resolve_decode_backend(model_runner)
+        self.backend = resolve_decode_backend(model_runner)
         self.backend.prepare(self)
 
         # --- capture --------------------------------------------------
@@ -773,10 +728,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                 or self.model_runner.spec_algorithm.is_dflash()
                 else max_num_tokens
             )
-            index = bisect.bisect_left(self.capture_bs, max_batch_size)
+            bs = self._pad_to_bucket(int(max_batch_size), self.capture_bs)
         else:
-            index = bisect.bisect_left(self.capture_bs, raw_bs)
-        bs = self.capture_bs[index]
+            bs = self._pad_to_bucket(raw_bs, self.capture_bs)
 
         buffers.populate_from_forward_batch(
             forward_batch=forward_batch,

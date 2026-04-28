@@ -628,8 +628,8 @@ class ServerArgs:
     enable_cudagraph_gc: bool = False
     debug_cuda_graph: bool = False
     # Canonical per-phase CUDA graph configuration.
-    # Filled in by ``cuda_graph_runner.config_resolution`` from convenience
-    # + legacy flags during ``ServerArgs.__post_init__``.
+    # Filled in by ``_resolve_cuda_graph_config`` from convenience +
+    # legacy flags during ``ServerArgs.__post_init__``.
     # Schema: {"decode": "full"|"breakable"|"tcpcg"|"disabled", "prefill": ...}
     cuda_graph_mode: Optional[Dict[str, str]] = None
     # Convenience flags — sugar for ``cuda_graph_mode``. Each translates
@@ -826,14 +826,10 @@ class ServerArgs:
 
         # Resolve CUDA graph configuration: parse legacy + convenience
         # flags into the canonical ``cuda_graph_mode``, run the per-phase
-        # auto-disable rules, downgrade unsupported combinations, and
-        # validate. GPU-memory-based size defaulting still lives in
+        # auto-disable rules, sync the legacy flag, and validate. GPU-
+        # memory-based size defaulting still lives in
         # ``_handle_gpu_memory_settings`` below.
-        from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
-            resolve_cuda_graph_config,
-        )
-
-        resolve_cuda_graph_config(self)
+        self._resolve_cuda_graph_config()
 
         # Get GPU memory capacity, which is a common dependency for several configuration steps.
         gpu_mem = get_device_memory_capacity(self.device)
@@ -1193,9 +1189,227 @@ class ServerArgs:
                 )
             self.disable_piecewise_cuda_graph = True
 
-    # The piecewise CUDA graph auto-disable table now lives in
-    # ``sglang.srt.model_executor.cuda_graph_runner.config_resolution``
-    # and runs via ``resolve_cuda_graph_config(self)`` from ``__post_init__``.
+    # ------------------------------------------------------------------
+    # CUDA graph configuration resolution
+    # ------------------------------------------------------------------
+    def _resolve_cuda_graph_config(self):
+        """Resolve ``cuda_graph_mode`` from JSON / convenience / legacy
+        flags, apply the per-phase auto-disable table, and validate.
+
+        Stage order:
+          1. ``_parse_cuda_graph_mode`` — explicit JSON > convenience
+             flags > legacy flags > defaults. Resolved into
+             ``self.cuda_graph_mode``.
+          2. Auto-disable rules — each rule mutates
+             ``self.cuda_graph_mode["prefill"] = "disabled"`` directly
+             (no double-pass).
+          3. ``self.disable_piecewise_cuda_graph`` is synced from the
+             resolved mode so legacy readers keep working.
+          4. ``_validate_cuda_graph_mode`` — reject unknown phases /
+             backends (including the implicit ``(prefill, full)``
+             rejection — see ``ALLOWED_BACKENDS_PER_PHASE``).
+        """
+        self._parse_cuda_graph_mode()
+        self._apply_cuda_graph_compatibility()
+        # Keep the legacy flag in sync with the canonical mode so
+        # downstream readers (layernorm, activation, communicator, etc.)
+        # don't need to know about ``cuda_graph_mode``.
+        self.disable_piecewise_cuda_graph = (
+            self.cuda_graph_mode.get("prefill") == "disabled"
+        )
+        self._validate_cuda_graph_mode()
+
+    def _parse_cuda_graph_mode(self):
+        from sglang.srt.model_executor.cuda_graph_backend.factory import (
+            ALL_PHASES,
+            BACKEND_BREAKABLE,
+            BACKEND_DISABLED,
+            DEFAULT_CUDA_GRAPH_MODE,
+            PHASE_DECODE,
+            PHASE_PREFILL,
+        )
+
+        explicit: Dict[str, str] = dict(self.cuda_graph_mode or {})
+        for phase in explicit:
+            if phase not in ALL_PHASES:
+                raise ValueError(
+                    f"--cuda-graph-mode has unknown phase {phase!r}; "
+                    f"allowed: {ALL_PHASES}"
+                )
+
+        # Legacy flags map to ``cuda_graph_mode`` entries. Lowest precedence.
+        legacy_view: Dict[str, str] = dict(DEFAULT_CUDA_GRAPH_MODE)
+        if self.disable_cuda_graph:
+            legacy_view[PHASE_DECODE] = BACKEND_DISABLED
+            legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
+        if self.disable_piecewise_cuda_graph:
+            legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
+        elif self.enable_breakable_cuda_graph:
+            legacy_view[PHASE_PREFILL] = BACKEND_BREAKABLE
+
+        # Convenience flags — sugar for one phase.
+        convenience_view: Dict[str, str] = {}
+        if self.prefill_disable_cuda_graph:
+            convenience_view[PHASE_PREFILL] = BACKEND_DISABLED
+        if self.decode_disable_cuda_graph:
+            convenience_view[PHASE_DECODE] = BACKEND_DISABLED
+        if self.prefill_cuda_graph_backend is not None:
+            convenience_view[PHASE_PREFILL] = self.prefill_cuda_graph_backend
+        if self.decode_cuda_graph_backend is not None:
+            convenience_view[PHASE_DECODE] = self.decode_cuda_graph_backend
+
+        # Merge: explicit > convenience > legacy > defaults.
+        resolved: Dict[str, str] = dict(DEFAULT_CUDA_GRAPH_MODE)
+        for phase in ALL_PHASES:
+            if phase in explicit:
+                resolved[phase] = explicit[phase]
+                # Warn on lower-precedence conflicts.
+                for src_name, src in (
+                    (
+                        f"--{phase}-cuda-graph-backend / --{phase}-disable-cuda-graph",
+                        convenience_view,
+                    ),
+                    ("legacy convenience flags", legacy_view),
+                ):
+                    if (
+                        phase in src
+                        and src[phase] != DEFAULT_CUDA_GRAPH_MODE[phase]
+                        and src[phase] != explicit[phase]
+                    ):
+                        logger.warning(
+                            "--cuda-graph-mode %s=%r overrides %s "
+                            "(which would have set %s=%r). Using JSON.",
+                            phase,
+                            explicit[phase],
+                            src_name,
+                            phase,
+                            src[phase],
+                        )
+            elif phase in convenience_view:
+                resolved[phase] = convenience_view[phase]
+                if (
+                    phase in legacy_view
+                    and legacy_view[phase] != DEFAULT_CUDA_GRAPH_MODE[phase]
+                    and legacy_view[phase] != convenience_view[phase]
+                ):
+                    logger.warning(
+                        "Per-phase convenience flag for %s=%r overrides legacy "
+                        "flag (which would have set %s=%r).",
+                        phase,
+                        convenience_view[phase],
+                        phase,
+                        legacy_view[phase],
+                    )
+            else:
+                resolved[phase] = legacy_view[phase]
+
+        self.cuda_graph_mode = resolved
+
+    def _apply_cuda_graph_compatibility(self):
+        """Auto-disable piecewise (prefill) for known-incompatible
+        configurations. Each rule mutates
+        ``self.cuda_graph_mode["prefill"] = "disabled"`` in place.
+        ``--enforce-piecewise-cuda-graph`` bypasses the entire table.
+        """
+        from sglang.srt.model_executor.cuda_graph_backend.factory import (
+            BACKEND_DISABLED,
+            PHASE_PREFILL,
+        )
+
+        if self.enforce_piecewise_cuda_graph:
+            return
+
+        rules = [
+            (
+                "model-arch blacklist",
+                lambda: self.get_model_config().is_piecewise_cuda_graph_disabled_model,
+            ),
+            ("DP attention", lambda: self.enable_dp_attention),
+            ("full torch.compile mode", lambda: self.enable_torch_compile),
+            ("pipeline parallelism (pp_size > 1)", lambda: self.pp_size > 1),
+            (
+                "non-CUDA hardware (HIP/NPU/CPU/MPS/XPU)",
+                lambda: is_hip() or is_npu() or is_cpu() or is_mps() or is_xpu(),
+            ),
+            (
+                "OOT platform without piecewise support",
+                self._oot_platform_blocks_piecewise,
+            ),
+            ("MoE A2A backend", lambda: self.moe_a2a_backend != "none"),
+            ("LoRA", lambda: bool(self.lora_paths) or self.enable_lora),
+            ("multimodal model", lambda: self.get_model_config().is_multimodal),
+            ("GGUF quantization", self._gguf_blocks_piecewise),
+            ("DLLM (diffusion LLM)", lambda: self.dllm_algorithm is not None),
+            (
+                "CPU offload / hierarchical cache",
+                lambda: self.cpu_offload_gb > 0 or self.enable_hierarchical_cache,
+            ),
+            (
+                "deterministic inference",
+                lambda: self.enable_deterministic_inference,
+            ),
+            ("PD disaggregation", lambda: self.disaggregation_mode != "null"),
+            ("symmetric memory", lambda: self.enable_symm_mem),
+            (
+                "expert distribution recorder",
+                lambda: self.enable_eplb
+                or self.expert_distribution_recorder_mode is not None,
+            ),
+            ("context parallel (attn_cp_size > 1)", lambda: self.attn_cp_size > 1),
+            ("CUDA graph debug mode", lambda: self.debug_cuda_graph),
+        ]
+
+        for _name, predicate in rules:
+            if predicate():
+                self.cuda_graph_mode[PHASE_PREFILL] = BACKEND_DISABLED
+
+    @staticmethod
+    def _oot_platform_blocks_piecewise() -> bool:
+        from sglang.srt.platforms import current_platform
+
+        return (
+            current_platform.is_out_of_tree()
+            and not current_platform.support_piecewise_cuda_graph()
+        )
+
+    def _gguf_blocks_piecewise(self) -> bool:
+        from sglang.srt.utils.hf_transformers_utils import check_gguf_file
+
+        return (
+            self.load_format == "gguf"
+            or self.quantization == "gguf"
+            or check_gguf_file(self.model_path)
+        )
+
+    def _validate_cuda_graph_mode(self):
+        from sglang.srt.model_executor.cuda_graph_backend.factory import (
+            ALL_PHASES,
+            ALLOWED_BACKENDS_PER_PHASE,
+            BACKEND_FULL,
+            PHASE_PREFILL,
+        )
+
+        mode = self.cuda_graph_mode or {}
+        for phase, backend in mode.items():
+            if phase not in ALLOWED_BACKENDS_PER_PHASE:
+                raise ValueError(
+                    f"--cuda-graph-mode has unknown phase {phase!r}; "
+                    f"allowed: {ALL_PHASES}"
+                )
+            allowed = ALLOWED_BACKENDS_PER_PHASE[phase]
+            if backend not in allowed:
+                if phase == PHASE_PREFILL and backend == BACKEND_FULL:
+                    raise ValueError(
+                        "--cuda-graph-mode prefill='full' is not supported. "
+                        "Full CUDA graph capture only fits fixed-shape "
+                        "deployments and prefill is variable-shape. Use "
+                        "'breakable' or 'tcpcg' for prefill, or 'disabled' "
+                        "to skip cuda graphs there."
+                    )
+                raise ValueError(
+                    f"--cuda-graph-mode {phase}={backend!r} is not allowed; "
+                    f"allowed values for {phase}: {allowed}"
+                )
 
     def _handle_multi_item_scoring(self):
         """Setup and validate multi-item scoring constraints.

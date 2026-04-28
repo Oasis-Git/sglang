@@ -19,6 +19,10 @@ from sglang.srt.model_executor.cuda_graph_backend.base import (  # noqa: F401
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (  # noqa: F401
     BreakableCudaGraphBackend,
 )
+from sglang.srt.model_executor.cuda_graph_backend.factory import (  # noqa: F401
+    resolve_decode_backend,
+    resolve_prefill_backend,
+)
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (  # noqa: F401
     FullCudaGraphBackend,
 )

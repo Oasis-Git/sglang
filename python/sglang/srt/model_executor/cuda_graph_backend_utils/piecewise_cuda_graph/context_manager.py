@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -66,35 +66,17 @@ def enable_piecewise_cuda_graph():
 
 @dataclass
 class ForwardContext:
-    def __init__(self):
-        self.forward_batch = None
-        self.attention_layers = None
-        self.quant_config = None
-        self.moe_layers = None
-        self.moe_fusions = None
-
-    def set_forward_batch(self, forward_batch: ForwardBatch):
-        self.forward_batch = forward_batch
-
-    def set_attention_layers(self, layers: List[Any]):
-        self.attention_layers = layers
-
-    def set_quant_config(self, quant_config: Any):
-        self.quant_config = quant_config
-
-    def set_moe_layers(self, layers: List[Any]):
-        self.moe_layers = layers
-
-    def set_moe_fusions(self, fusions: List[Any]):
-        self.moe_fusions = fusions
+    forward_batch: Optional["ForwardBatch"] = None
+    attention_layers: Optional[List[Any]] = field(default=None)
+    quant_config: Any = None
+    moe_layers: Optional[List[Any]] = field(default=None)
+    moe_fusions: Optional[List[Any]] = field(default=None)
 
 
 _forward_context: Optional[ForwardContext] = None
 
 
 def get_forward_context() -> Optional[ForwardContext]:
-    if _forward_context is None:
-        return None
     return _forward_context
 
 
@@ -107,12 +89,13 @@ def set_forward_context(
     moe_fusions: List[Any],
 ):
     global _forward_context
-    _forward_context = ForwardContext()
-    _forward_context.set_forward_batch(forward_batch)
-    _forward_context.set_attention_layers(attention_layers)
-    _forward_context.set_quant_config(quant_config)
-    _forward_context.set_moe_layers(moe_layers)
-    _forward_context.set_moe_fusions(moe_fusions)
+    _forward_context = ForwardContext(
+        forward_batch=forward_batch,
+        attention_layers=attention_layers,
+        quant_config=quant_config,
+        moe_layers=moe_layers,
+        moe_fusions=moe_fusions,
+    )
     try:
         yield
     finally:

@@ -133,10 +133,27 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
     # BaseCudaGraphBackend interface
     # -----------------------------------------------------------------
     def prepare(self, runner) -> None:
-        """One-time setup: build CompilationConfig, install torch.compile
-        wrapping on the language model, and run the warmup-compile loop
-        over every shape so torch.compile finishes JIT compilation
-        before the cuda-graph capture session opens.
+        """One-time setup: build CompilationConfig, JIT-activate kernels,
+        install torch.compile wrapping on the language model, then run
+        the compile-loop pass so torch.compile finishes FX/inductor
+        compilation for every shape. Per-shape *cuda graph capture* is
+        not done here — that lives in ``capture_one`` (matches Full /
+        BCG: prepare = setup, capture_one = warmup + record).
+
+        Phase breakdown for tcpcg, paired with what Full / BCG do:
+
+          1. JIT-kernel-activate forward (1 call at smallest shape):
+             warms shared CUDA kernels before torch.compile sees the
+             model. tcpcg-only.
+          2. install_compile: wraps ``language_model.model.forward``
+             with ``torch.compile``. tcpcg-only.
+          3. Compile-loop pass: 1 forward per shape inside
+             ``enable_torch_compile_warmup`` — the FX backend short-
+             circuits the cuda-graph branch (see
+             ``cuda_piecewise_backend:143``) so this only triggers
+             FX/inductor compilation. tcpcg-only.
+          4. Per-shape warmup + record: handled by ``capture_one``;
+             matches Full / BCG's 2x warmup + 1x capture pattern.
 
         Requires the runner to expose:
           - ``runner.model_runner.server_args``
@@ -144,7 +161,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
             multimodal case, or .model otherwise)
           - ``runner.device_module``
           - ``runner.capture_num_tokens``
-          - ``runner._run_warmup_forward(num_tokens)`` callable
+          - ``runner._run_dummy_forward(num_tokens)`` callable
         """
         self._compile_config = self.build_compilation_config(
             runner.model_runner.server_args
@@ -165,19 +182,23 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
                         language_model.model, reverse=False, num_tokens=16
                     )
 
-                # Dummy warmup to JIT shared kernels before install_compile.
-                runner._run_warmup_forward(num_tokens=runner.capture_num_tokens[0])
+                # Step 1: JIT-activate kernels at the smallest shape.
+                runner._run_dummy_forward(num_tokens=runner.capture_num_tokens[0])
 
                 if self._pool is None:
                     self._pool = self._device_module.graph_pool_handle()
                 set_graph_pool_id(self._pool)
 
+                # Step 2: wrap model.forward with torch.compile.
                 self.install_compile(
                     language_model.model,
                     compile_config=self._compile_config,
                     graph_pool=self._pool,
                 )
 
+                # Step 3: trigger FX/inductor compilation for every shape.
+                # The FX backend skips cuda-graph capture while the
+                # warmup flag is set.
                 with enable_torch_compile_warmup():
                     compile_range = (
                         tqdm.tqdm(list(reversed(runner.capture_num_tokens)))
@@ -189,7 +210,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
                             compile_range.set_description(
                                 f"Compiling num tokens ({num_tokens=})"
                             )
-                        runner._run_warmup_forward(num_tokens=num_tokens)
+                        runner._run_dummy_forward(num_tokens=num_tokens)
             finally:
                 _toggle_multi_platform_ops(
                     language_model.model, reverse=True, num_tokens=16
@@ -233,10 +254,15 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         forward_fn: Callable[[], Any],
         dummies: Optional[Any] = None,
     ) -> None:
-        """Run ``forward_fn`` twice: first call jit-warms kernels at this
-        shape, second call is what torch.compile's piecewise backend
-        records cuda graphs from (because we're inside ``capture_session``
-        which sets ``set_pcg_capture_stream``).
+        """Per-shape warmup + record (steps 3 of the FX backend's per-
+        shape state machine; see ``cuda_piecewise_backend.py``).
+
+        The first ``forward_fn`` call increments the FX backend's
+        per-shape ``num_finished_warmup`` counter (no capture); the
+        second call triggers the actual cuda-graph capture because
+        we are inside ``capture_session`` (which sets
+        ``set_pcg_capture_stream`` and ``enable_piecewise_cuda_graph``).
+        Mirrors Full / BCG's 2x warmup + 1x capture pattern.
         """
         for _ in range(2):
             self._device_module.synchronize()
