@@ -27,8 +27,8 @@ import torch
 import tqdm
 
 from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
-from sglang.srt.compilation.compilation_config import CompilationConfig
-from sglang.srt.compilation.compile import install_torch_compiled
+# CompilationConfig + install_torch_compiled are now used via
+# TCPiecewiseCudaGraphBackend (Phase 2d) — no direct imports needed here.
 from sglang.srt.compilation.compile_phase import (
     enable_torch_compile_warmup,
     set_pcg_capture_stream,
@@ -50,7 +50,7 @@ from sglang.srt.layers.dp_attention import (
     set_is_extend_in_batch,
 )
 from sglang.srt.layers.logits_processor import LogitsProcessorOutput
-from sglang.srt.layers.moe.utils import get_moe_a2a_backend
+# get_moe_a2a_backend usage moved to TCPiecewiseCudaGraphBackend (Phase 2d).
 from sglang.srt.layers.pooler import EmbeddingPoolerOutput
 from sglang.srt.layers.utils import MultiPlatformOp
 from sglang.srt.model_executor.forward_batch_info import (
@@ -170,22 +170,15 @@ class PiecewiseCudaGraphRunner:
 
         set_torch_compile_config()
 
-        assert (
-            self.model_runner.server_args.piecewise_cuda_graph_tokens is not None
-        ), "piecewise_cuda_graph_tokens is not set"
-        assert self.model_runner.server_args.piecewise_cuda_graph_compiler in [
-            "eager",
-            "inductor",
-        ], "By now, only eager and inductor are supported for piecewise cuda graph compiler."
-        self.compile_config = CompilationConfig(
-            self.model_runner.server_args.piecewise_cuda_graph_tokens,
-            self.model_runner.server_args.piecewise_cuda_graph_compiler,
-            self.model_runner.server_args.enable_torch_compile_debug_mode,
+        # Phase 2d: CompilationConfig construction (incl. MoE A2A split-op
+        # adjustment) lives in TCPiecewiseCudaGraphBackend.
+        from sglang.srt.model_executor.cuda_graph_backend.tcpcg import (
+            TCPiecewiseCudaGraphBackend,
         )
-        if get_moe_a2a_backend().is_deepep() or get_moe_a2a_backend().is_mooncake():
-            self.compile_config.add_split_op(
-                "sglang.moe_forward_piecewise_cuda_graph_impl"
-            )
+
+        self.compile_config = TCPiecewiseCudaGraphBackend.build_compilation_config(
+            self.model_runner.server_args
+        )
 
         self.quant_config = getattr(self.model_runner.model, "quant_config", None)
 
@@ -292,10 +285,13 @@ class PiecewiseCudaGraphRunner:
                 # Dummy warmup for jit kernel
                 self.warmup_compile(num_tokens=self.capture_num_tokens[0])
 
-                install_torch_compiled(
+                # Phase 2d: install_torch_compiled wraps via the backend.
+                from sglang.srt.model_executor.cuda_graph_backend.tcpcg import (
+                    TCPiecewiseCudaGraphBackend,
+                )
+
+                TCPiecewiseCudaGraphBackend.install_compile(
                     patched_model,
-                    fullgraph=True,
-                    dynamic_arg_dims=None,
                     compile_config=self.compile_config,
                     graph_pool=get_global_graph_memory_pool(),
                 )
