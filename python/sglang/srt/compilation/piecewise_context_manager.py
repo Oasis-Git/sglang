@@ -10,11 +10,11 @@ import sites keep working.
 
 Symbol rename map (old → new):
 
-    is_in_piecewise_cuda_graph              → is_in_cuda_graph_capture
-    enable_piecewise_cuda_graph             → enable_cuda_graph_capture
+    is_in_piecewise_cuda_graph              → is_in_piecewise_cuda_graph
+    enable_piecewise_cuda_graph             → enable_piecewise_cuda_graph
     is_in_pcg_torch_compile                 → is_in_torch_compile_warmup
     enable_piecewise_cuda_graph_compile     → enable_torch_compile_warmup
-    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG → CUDA_GRAPH_CAPTURE_FAILED_MSG
+    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG → PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG
 
 Stream + ForwardContext helpers keep their names; only the home moved.
 """
@@ -23,11 +23,11 @@ from __future__ import annotations
 
 # Capture flag + ForwardContext (new home).
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph.context_manager import (  # noqa: F401
-    CUDA_GRAPH_CAPTURE_FAILED_MSG,
+    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
     ForwardContext,
-    enable_cuda_graph_capture,
+    enable_piecewise_cuda_graph,
     get_forward_context,
-    is_in_cuda_graph_capture,
+    is_in_piecewise_cuda_graph,
     set_forward_context,
 )
 
@@ -41,8 +41,8 @@ from sglang.srt.compilation.compile_phase import (  # noqa: F401
 
 # Legacy-name aliases. Audited callers should import the renamed
 # symbols directly from their new homes.
-is_in_piecewise_cuda_graph = is_in_cuda_graph_capture
-enable_piecewise_cuda_graph = enable_cuda_graph_capture
+is_in_piecewise_cuda_graph = is_in_piecewise_cuda_graph
+enable_piecewise_cuda_graph = enable_piecewise_cuda_graph
 is_in_pcg_torch_compile = is_in_torch_compile_warmup
 enable_piecewise_cuda_graph_compile = enable_torch_compile_warmup
-PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG = CUDA_GRAPH_CAPTURE_FAILED_MSG
+PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG = PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG

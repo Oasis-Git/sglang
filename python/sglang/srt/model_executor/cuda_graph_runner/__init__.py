@@ -19,7 +19,7 @@ into the new runner classes in a follow-up.
 # remains 1:1 with the original module.
 from sglang.srt.model_executor.cuda_graph_runner.legacy import *  # noqa: F401,F403
 from sglang.srt.model_executor.cuda_graph_runner.legacy import (  # noqa: F401
-    CUDA_GRAPH_CAPTURE_FAILED_MSG,
+    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
     _default_make_graph_key,
     _grouped_foreach_copy_,
     _set_capture_lora_variant,

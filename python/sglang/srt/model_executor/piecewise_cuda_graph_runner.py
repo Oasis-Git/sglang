@@ -34,7 +34,7 @@ from sglang.srt.compilation.compile_phase import (
     set_pcg_capture_stream,
 )
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    enable_cuda_graph_capture,
+    enable_piecewise_cuda_graph,
     set_forward_context,
 )
 from sglang.srt.distributed import get_tensor_model_parallel_rank
@@ -274,7 +274,7 @@ class PiecewiseCudaGraphRunner:
         # Set graph pool id globally to be able to use symmetric memory
         set_graph_pool_id(get_global_graph_memory_pool())
 
-        with enable_cuda_graph_capture():
+        with enable_piecewise_cuda_graph():
             language_model = getattr(
                 self.model_runner.model, "language_model", self.model_runner.model
             )
@@ -776,7 +776,7 @@ class PiecewiseCudaGraphRunner:
         forward_batch: ForwardBatch,
         **kwargs,
     ) -> Union[LogitsProcessorOutput, PPProxyTensors, EmbeddingPoolerOutput]:
-        with enable_cuda_graph_capture():
+        with enable_piecewise_cuda_graph():
             static_forward_batch = self.replay_prepare(forward_batch, **kwargs)
             # Replay
             with set_forward_context(

@@ -18,7 +18,7 @@ import torch
 
 from sglang.kernel_api_logging import debug_kernel_api
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    is_in_cuda_graph_capture,
+    is_in_piecewise_cuda_graph,
 )
 from sglang.srt.dllm.config import DllmConfig
 from sglang.srt.environ import envs
@@ -491,7 +491,7 @@ class FlashInferAttnBackend(AttentionBackend):
                 extend_no_prefix = False
             else:
                 use_ragged = (
-                    not self.enable_deterministic and not is_in_cuda_graph_capture()
+                    not self.enable_deterministic and not is_in_piecewise_cuda_graph()
                 )
                 extend_no_prefix = not any(forward_batch.extend_prefix_lens_cpu)
 

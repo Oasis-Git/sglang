@@ -12,7 +12,7 @@ from sglang.srt.batch_overlap.single_batch_overlap import DownGemmOverlapArgs
 from sglang.srt.batch_overlap.two_batch_overlap import MaybeTboDeepEPDispatcher
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
     get_forward_context,
-    is_in_cuda_graph_capture,
+    is_in_piecewise_cuda_graph,
 )
 from sglang.srt.distributed import (
     get_moe_expert_parallel_rank,
@@ -1028,7 +1028,7 @@ class FusedMoE(torch.nn.Module):
             )
 
     def forward(self, hidden_states: torch.Tensor, topk_output: TopKOutput):
-        if is_in_cuda_graph_capture():
+        if is_in_piecewise_cuda_graph():
             if TopKOutputChecker.format_is_standard(topk_output):
                 return moe_forward_piecewise_cuda_graph_impl(
                     hidden_states,

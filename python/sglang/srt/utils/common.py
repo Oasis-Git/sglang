@@ -2906,10 +2906,10 @@ def dispose_tensor(x: torch.Tensor):
     # backing storage would invalidate addresses recorded in the graph.
     # Local import avoids a circular dependency.
     from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-        is_in_cuda_graph_capture,
+        is_in_piecewise_cuda_graph,
     )
 
-    if is_in_cuda_graph_capture():
+    if is_in_piecewise_cuda_graph():
         return
 
     x.set_(torch.empty((0,), device=x.device, dtype=x.dtype))

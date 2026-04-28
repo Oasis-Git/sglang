@@ -28,7 +28,7 @@ from transformers import PretrainedConfig
 
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
     get_forward_context,
-    is_in_cuda_graph_capture,
+    is_in_piecewise_cuda_graph,
 )
 from sglang.srt.distributed import (
     get_moe_expert_parallel_rank,
@@ -249,7 +249,7 @@ class GptOssSparseMoeBlock(nn.Module):
         should_allreduce_fusion: bool = False,
     ) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
-        if is_in_cuda_graph_capture():
+        if is_in_piecewise_cuda_graph():
             final_hidden_states = moe_impl(self.layer_id, hidden_states)
         else:
             router_logits, _ = self.router(hidden_states)

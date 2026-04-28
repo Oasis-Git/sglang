@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Callable, Optional, Union
 import torch
 
 from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    is_in_cuda_graph_capture,
+    is_in_piecewise_cuda_graph,
 )
 from sglang.srt.environ import envs
 from sglang.srt.layers.attention.base_attn_backend import AttentionBackend
@@ -326,7 +326,7 @@ class FlashInferMLAAttnBackend(AttentionBackend):
                 not get_global_server_args().flashinfer_mla_disable_ragged
                 and extend_no_prefix
                 # Piecewise cuda graph should use paged prefill to be compatible with prefix cache
-                and not is_in_cuda_graph_capture()
+                and not is_in_piecewise_cuda_graph()
             )
 
             self.indices_updater_prefill.update(

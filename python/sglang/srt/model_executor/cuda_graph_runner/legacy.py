@@ -723,7 +723,7 @@ class CudaGraphRunner:
                 self.capture()
         except RuntimeError as e:
             raise Exception(
-                f"Capture cuda graph failed: {e}\n{CUDA_GRAPH_CAPTURE_FAILED_MSG}"
+                f"Capture cuda graph failed: {e}\n{PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG}"
             )
 
     def maybe_init_pdmux(self):
@@ -1437,7 +1437,7 @@ class CudaGraphRunner:
         return spec_info
 
 
-CUDA_GRAPH_CAPTURE_FAILED_MSG = (
+PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG = (
     "Possible solutions:\n"
     "1. set --mem-fraction-static to a smaller value (e.g., 0.8 or 0.7)\n"
     "2. set --cuda-graph-max-bs to a smaller value (e.g., 16)\n"
