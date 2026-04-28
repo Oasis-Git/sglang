@@ -628,11 +628,17 @@ class ServerArgs:
     enable_cudagraph_gc: bool = False
     debug_cuda_graph: bool = False
     # Canonical per-phase CUDA graph configuration.
-    # Phase 0: field exists but is unread; legacy flags above still drive behavior.
-    # Phase 1+: filled in by ``cuda_graph_runner.config_resolution`` from
-    # legacy flags, then becomes the source of truth.
+    # Filled in by ``cuda_graph_runner.config_resolution`` from convenience
+    # + legacy flags during ``ServerArgs.__post_init__``.
     # Schema: {"decode": "full"|"breakable"|"tcpcg"|"disabled", "prefill": ...}
     cuda_graph_mode: Optional[Dict[str, str]] = None
+    # Phase 4b convenience flags — sugar for ``cuda_graph_mode``. See plan §3.2.
+    # Each translates to a single-phase entry; ``--cuda-graph-mode`` JSON wins
+    # when there is a conflict (warning emitted).
+    prefill_disable_cuda_graph: bool = False
+    decode_disable_cuda_graph: bool = False
+    prefill_cuda_graph_backend: Optional[str] = None  # full|breakable|tcpcg|disabled
+    decode_cuda_graph_backend: Optional[str] = None
     enable_layerwise_nvtx_marker: bool = False
     enable_nccl_nvls: bool = False
     enable_symm_mem: bool = False
@@ -5862,7 +5868,42 @@ class ServerArgs:
             help="Canonical per-phase CUDA graph configuration as a JSON "
             "object, e.g. '{\"decode\":\"full\",\"prefill\":\"breakable\"}'. "
             "Allowed values per phase: full, breakable, tcpcg, disabled. "
-            "Phase 4 of the cg-refactor wires this up; today it is a no-op.",
+            "Convenience flags (--{prefill,decode}-cuda-graph-backend, "
+            "--{prefill,decode}-disable-cuda-graph) sugar a single phase; "
+            "this JSON sets both phases at once and wins on conflict.",
+        )
+
+        # Phase 4b convenience flags. Each maps to a single phase of the
+        # canonical ``cuda_graph_mode`` dict. ``cuda-graph-mode`` JSON wins
+        # on conflict; a warning is emitted naming both.
+        _BACKEND_CHOICES = ("full", "breakable", "tcpcg", "disabled")
+        parser.add_argument(
+            "--prefill-cuda-graph-backend",
+            type=str,
+            choices=_BACKEND_CHOICES,
+            default=ServerArgs.prefill_cuda_graph_backend,
+            help="Backend for the prefill (extend) phase. Equivalent to "
+            "``--cuda-graph-mode '{\"prefill\":\"...\"}'`` (no decode change).",
+        )
+        parser.add_argument(
+            "--decode-cuda-graph-backend",
+            type=str,
+            choices=_BACKEND_CHOICES,
+            default=ServerArgs.decode_cuda_graph_backend,
+            help="Backend for the decode phase. Equivalent to "
+            "``--cuda-graph-mode '{\"decode\":\"...\"}'`` (no prefill change).",
+        )
+        parser.add_argument(
+            "--prefill-disable-cuda-graph",
+            action="store_true",
+            default=ServerArgs.prefill_disable_cuda_graph,
+            help="Shortcut for --prefill-cuda-graph-backend=disabled.",
+        )
+        parser.add_argument(
+            "--decode-disable-cuda-graph",
+            action="store_true",
+            default=ServerArgs.decode_disable_cuda_graph,
+            help="Shortcut for --decode-cuda-graph-backend=disabled.",
         )
         parser.add_argument(
             "--enable-layerwise-nvtx-marker",

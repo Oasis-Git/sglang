@@ -153,21 +153,24 @@ _DEFAULT_CUDA_GRAPH_MODE = {
 
 
 def _parse_canonical(server_args: "ServerArgs") -> None:
-    """Stage 1 — populate ``server_args.cuda_graph_mode`` if not yet set
-    by translating today's legacy flags.
+    """Stage 1 — populate ``server_args.cuda_graph_mode`` from explicit
+    JSON, convenience flags, and legacy flags.
 
-    Precedence (matches plan §3.2 + §6 Q8):
-      1. Explicit ``--cuda-graph-mode`` JSON wins (per phase that it
-         specifies).
-      2. Legacy ``--disable-cuda-graph`` overrides decode to ``disabled``.
-      3. Legacy ``--disable-piecewise-cuda-graph`` overrides prefill to
-         ``disabled``.
-      4. Legacy ``--enable-breakable-cuda-graph`` chooses prefill backend
-         (``breakable``).
-      5. Otherwise, defaults from ``_DEFAULT_CUDA_GRAPH_MODE``.
+    Precedence (highest first), per plan §3.2 + §6 Q8:
+      1. ``--cuda-graph-mode`` JSON (per phase it specifies).
+      2. Phase 4b convenience flags:
+         - ``--{prefill,decode}-disable-cuda-graph`` → ``disabled``.
+         - ``--{prefill,decode}-cuda-graph-backend`` → that backend.
+      3. Legacy flags:
+         - ``--disable-cuda-graph`` → both phases ``disabled``.
+         - ``--disable-piecewise-cuda-graph`` → prefill ``disabled``.
+         - ``--enable-breakable-cuda-graph`` → prefill ``breakable``.
+      4. Defaults: ``{decode: full, prefill: tcpcg}``.
 
-    When the explicit JSON conflicts with a legacy convenience flag, the
-    JSON wins and we emit a warning naming both — Q8 from the plan.
+    On conflict between higher- and lower-precedence sources, a warning
+    is emitted naming the override (Q8). Re-runs of ``_parse_canonical``
+    are idempotent — the resolved ``cuda_graph_mode`` becomes the
+    explicit input for any subsequent re-parse.
     """
     explicit: Dict[str, str] = dict(server_args.cuda_graph_mode or {})
 
@@ -180,33 +183,65 @@ def _parse_canonical(server_args: "ServerArgs") -> None:
                 f"allowed: {ALL_PHASES}"
             )
 
-    resolved: Dict[str, str] = dict(_DEFAULT_CUDA_GRAPH_MODE)
-
-    # Build the legacy-flag-derived view of what the canonical mode
-    # would be without --cuda-graph-mode. Used both as a fallback when
-    # JSON is unset, and to detect conflicts when JSON is set.
+    # Build per-source views, lowest precedence first.
     legacy_view: Dict[str, str] = dict(_DEFAULT_CUDA_GRAPH_MODE)
     if server_args.disable_cuda_graph:
         legacy_view[PHASE_DECODE] = BACKEND_DISABLED
+        legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
     if server_args.disable_piecewise_cuda_graph:
         legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
     elif server_args.enable_breakable_cuda_graph:
         legacy_view[PHASE_PREFILL] = BACKEND_BREAKABLE
 
-    # Merge: explicit JSON wins per-phase; legacy view fills gaps.
+    convenience_view: Dict[str, str] = {}
+    if server_args.prefill_disable_cuda_graph:
+        convenience_view[PHASE_PREFILL] = BACKEND_DISABLED
+    if server_args.decode_disable_cuda_graph:
+        convenience_view[PHASE_DECODE] = BACKEND_DISABLED
+    if server_args.prefill_cuda_graph_backend is not None:
+        convenience_view[PHASE_PREFILL] = server_args.prefill_cuda_graph_backend
+    if server_args.decode_cuda_graph_backend is not None:
+        convenience_view[PHASE_DECODE] = server_args.decode_cuda_graph_backend
+
+    # Merge highest-precedence first. Explicit JSON wins; convenience
+    # flags fill remaining phases; legacy flags fill the rest; defaults
+    # cover anything still missing.
+    resolved: Dict[str, str] = dict(_DEFAULT_CUDA_GRAPH_MODE)
     for phase in ALL_PHASES:
         if phase in explicit:
             resolved[phase] = explicit[phase]
+            # Warn on lower-precedence conflicts.
+            for src_name, src in (
+                ("--{}-cuda-graph-backend / --{}-disable-cuda-graph".format(phase, phase),
+                 convenience_view),
+                ("legacy convenience flags", legacy_view),
+            ):
+                if (
+                    phase in src
+                    and src[phase] != _DEFAULT_CUDA_GRAPH_MODE[phase]
+                    and src[phase] != explicit[phase]
+                ):
+                    logger.warning(
+                        "--cuda-graph-mode %s=%r overrides %s "
+                        "(which would have set %s=%r). Using JSON.",
+                        phase,
+                        explicit[phase],
+                        src_name,
+                        phase,
+                        src[phase],
+                    )
+        elif phase in convenience_view:
+            resolved[phase] = convenience_view[phase]
             if (
                 phase in legacy_view
                 and legacy_view[phase] != _DEFAULT_CUDA_GRAPH_MODE[phase]
-                and legacy_view[phase] != explicit[phase]
+                and legacy_view[phase] != convenience_view[phase]
             ):
                 logger.warning(
-                    "--cuda-graph-mode %s=%r overrides legacy convenience "
-                    "flag (which would have set %s=%r). Using JSON.",
+                    "Per-phase convenience flag for %s=%r overrides legacy "
+                    "flag (which would have set %s=%r).",
                     phase,
-                    explicit[phase],
+                    convenience_view[phase],
                     phase,
                     legacy_view[phase],
                 )
