@@ -9,6 +9,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph.bre
 from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph.breakable_cuda_graph import (  # noqa: F401
     BreakableCUDAGraph,
     BreakableCUDAGraphCapture,
+    _copy_output,
     break_graph,
     eager_on_graph,
     get_current_stream,
