@@ -2624,8 +2624,15 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             GraphRunnerCls = current_platform.get_graph_runner_cls()
             self.graph_runner = GraphRunnerCls(self)
         else:
+            # Phase 3 of cg-refactor: DecodeCudaGraphRunner is the
+            # canonical name for the decode-phase runner; today it
+            # subclasses CudaGraphRunner unchanged.
+            from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (
+                DecodeCudaGraphRunner,
+            )
+
             graph_runners = defaultdict(
-                lambda: CudaGraphRunner,
+                lambda: DecodeCudaGraphRunner,
                 {
                     "cpu": CPUGraphRunner,
                     "npu": NPUGraphRunner,
@@ -2749,11 +2756,15 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             f"Capture piecewise CUDA graph begin. avail mem={before_mem:.2f} GB"
         )
 
-        if self.server_args.enable_breakable_cuda_graph:
-            # Experimental feature
-            self.piecewise_cuda_graph_runner = BreakableCudaGraphRunner(self)
-        else:
-            self.piecewise_cuda_graph_runner = PiecewiseCudaGraphRunner(self)
+        # Phase 3 of cg-refactor: PrefillCudaGraphRunner is the canonical
+        # name; the factory selects breakable vs tcpcg by today's
+        # ``enable_breakable_cuda_graph`` flag (Phase 4 will drive it via
+        # ``cuda_graph_mode``).
+        from sglang.srt.model_executor.cuda_graph_runner.prefill_runner import (
+            PrefillCudaGraphRunner,
+        )
+
+        self.piecewise_cuda_graph_runner = PrefillCudaGraphRunner(self)
 
         after_mem = get_available_gpu_memory(self.device, self.gpu_id)
         mem_usage = before_mem - after_mem
