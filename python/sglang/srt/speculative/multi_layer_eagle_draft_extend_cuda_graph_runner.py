@@ -22,18 +22,25 @@ from typing import TYPE_CHECKING, Callable, List, Optional
 
 import torch
 
-from sglang.srt.layers.dp_attention import DpPaddingMode, set_dp_buffer_len
+import tqdm
+
+from sglang.srt.compilation.torch_compile_decoration import set_torch_compile_config
+from sglang.srt.distributed import get_tensor_model_parallel_rank
+from sglang.srt.distributed.parallel_state import graph_capture
+from sglang.srt.layers.dp_attention import (
+    DpPaddingMode,
+    set_dp_buffer_len,
+    set_is_extend_in_batch,
+)
+from sglang.srt.layers.logits_processor import LogitsProcessorOutput
 from sglang.srt.model_executor.cuda_graph_runner import (
     PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
-    CudaGraphRunner,
     DeepEPCudaGraphRunnerAdapter,
-    LogitsProcessorOutput,
+    freeze_gc,
     get_batch_sizes_to_capture,
     get_global_graph_memory_pool,
     model_capture_mode,
     set_global_graph_memory_pool,
-    set_is_extend_in_batch,
-    set_torch_compile_config,
 )
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
@@ -287,7 +294,28 @@ class MultiLayerEagleDraftExtendCudaGraphRunner:
         self.graphs[self.bs].replay()
 
     def capture(self):
-        CudaGraphRunner.capture(self)
+        capture_range = (
+            tqdm.tqdm(list(reversed(self.capture_bs)))
+            if get_tensor_model_parallel_rank() == 0
+            else reversed(self.capture_bs)
+        )
+        with freeze_gc(
+            self.model_runner.server_args.enable_cudagraph_gc
+        ), graph_capture() as graph_capture_context:
+            self.stream = graph_capture_context.stream
+            for bs in capture_range:
+                if get_tensor_model_parallel_rank() == 0:
+                    avail_mem = get_available_gpu_memory(
+                        self.model_runner.device,
+                        self.model_runner.gpu_id,
+                        empty_cache=False,
+                    )
+                    capture_range.set_description(
+                        f"Capturing batches ({bs=} {avail_mem=:.2f} GB)"
+                    )
+                graph, output = self.capture_one_batch_size(bs, None, 0)
+                self.graphs[bs] = graph
+                self.output_buffers[bs] = output
 
     def get_forward_batch(self, bs: int) -> ForwardBatch:
         buffers = self.buffers

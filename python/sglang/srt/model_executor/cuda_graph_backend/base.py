@@ -57,6 +57,10 @@ class BaseCudaGraphBackend(ABC):
     ) -> None: ...
 
     @abstractmethod
+    def has_shape(self, shape_key: Any) -> bool:
+        """Whether ``capture_one`` has been called for this shape."""
+
+    @abstractmethod
     def replay(
         self,
         shape_key: Any,

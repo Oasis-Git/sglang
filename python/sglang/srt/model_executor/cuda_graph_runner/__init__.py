@@ -1,32 +1,44 @@
 """Phase-aware CUDA graph runners.
 
 Public API:
-  - ``CudaGraphRunner`` — the decode-phase runner (lives in ``.legacy``;
-    re-exported here for backwards-compatible import paths).
-  - ``DecodeCudaGraphRunner`` — factory selecting the decode backend
-    (full / breakable; tcpcg falls back to full with a warning) from
-    ``cuda_graph_mode["decode"]``.
-  - ``PrefillCudaGraphRunner`` — factory selecting the prefill backend
-    (breakable / tcpcg; full is silently downgraded to disabled) from
-    ``cuda_graph_mode["prefill"]``.
-
-The legacy module hosts the implementation today and will be folded
-into the new runner classes in a follow-up.
+  - ``BaseCudaGraphRunner`` — abstract base.
+  - ``DecodeCudaGraphRunner`` — concrete decode-phase runner.
+  - ``PrefillCudaGraphRunner`` — prefill-phase factory (for now still
+    selecting between the legacy BCG / PCG runners; will be lifted into
+    a real concrete runner in Phase F).
+  - Helpers re-exported for the EAGLE / multi-step draft cuda graph
+    runners that were authored against the legacy public surface.
 """
 
-# Re-export legacy public API. Public names propagate via a star import;
-# a few underscore-prefixed names are explicitly listed so the surface
-# remains 1:1 with the original module.
-from sglang.srt.model_executor.cuda_graph_runner.legacy import *  # noqa: F401,F403
-from sglang.srt.model_executor.cuda_graph_runner.legacy import (  # noqa: F401
+from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (  # noqa: F401
     PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
-    _default_make_graph_key,
+)
+from sglang.srt.model_executor.cuda_graph_runner.base_runner import (  # noqa: F401
+    BaseCudaGraphRunner,
+    freeze_gc,
+    get_batch_sizes_to_capture,
+)
+from sglang.srt.model_executor.cuda_graph_runner.buffers import (  # noqa: F401
+    DecodeInputBuffers,
+    PrefillInputBuffers,
     _grouped_foreach_copy_,
+)
+from sglang.srt.model_executor.cuda_graph_runner.capture_mode import (  # noqa: F401
     _set_capture_lora_variant,
-    _to_torch,
+    get_capture_lora_variant,
+    get_is_capture_mode,
+    model_capture_mode,
 )
 from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (  # noqa: F401
     DecodeCudaGraphRunner,
+    _make_graph_key as _default_make_graph_key,
+)
+from sglang.srt.model_executor.cuda_graph_runner.deepep_adapter import (  # noqa: F401
+    DeepEPCudaGraphRunnerAdapter,
+)
+from sglang.srt.model_executor.cuda_graph_runner.pool import (  # noqa: F401
+    get_global_graph_memory_pool,
+    set_global_graph_memory_pool,
 )
 from sglang.srt.model_executor.cuda_graph_runner.prefill_runner import (  # noqa: F401
     PrefillCudaGraphRunner,

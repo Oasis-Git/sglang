@@ -28,7 +28,7 @@ import torch
 import sglang
 from sglang.srt.configs.model_config import AttentionArch, is_deepseek_nsa
 from sglang.srt.distributed.parallel_state import GroupCoordinator
-from sglang.srt.model_executor.cuda_graph_runner import CudaGraphRunner
+from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.utils import (
     empty_context,
     get_bool_env_var,
@@ -70,11 +70,15 @@ def patch_model_npu(
         yield model.forward
 
 
-class NPUGraphRunner(CudaGraphRunner):
+class NPUGraphRunner(DecodeCudaGraphRunner):
     """A NPUGraphRunner runs the forward pass of a model with npu graph and torch.compile."""
 
     def __init__(self, model_runner: ModelRunner):
-        sglang.srt.model_executor.cuda_graph_runner.patch_model = patch_model_npu
+        # NPU patch_model override: monkey-patch torch_compile_decoration's
+        # patch_model with the NPU-specific version.
+        from sglang.srt.compilation import torch_compile_decoration
+
+        torch_compile_decoration.patch_model = patch_model_npu
         super().__init__(model_runner)
         self.update_attr_name = None
         self.update_attr_type = None

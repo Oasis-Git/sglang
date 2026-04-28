@@ -48,7 +48,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph imp
     BreakableCUDAGraphCapture,
     enable_breakable_cuda_graph,
 )
-from sglang.srt.model_executor.cuda_graph_runner import (
+from sglang.srt.model_executor.cuda_graph_runner.pool import (
     get_global_graph_memory_pool,
     set_global_graph_memory_pool,
 )
