@@ -32,15 +32,30 @@ class PrefillCudaGraphRunner:
     """
 
     def __new__(cls, model_runner: "ModelRunner"):
+        # Phase 4a: drive selection from canonical ``cuda_graph_mode``
+        # (resolved from legacy flags + JSON in
+        # ``cuda_graph_runner.config_resolution._parse_canonical``).
+        # The "disabled" branch is handled at the model_runner level —
+        # if prefill is disabled, the factory is not constructed.
+        from sglang.srt.model_executor.cuda_graph_runner.config_resolution import (
+            BACKEND_BREAKABLE,
+            BACKEND_TCPCG,
+            PHASE_PREFILL,
+        )
+
+        mode = model_runner.server_args.cuda_graph_mode or {}
+        backend = mode.get(PHASE_PREFILL, BACKEND_TCPCG)
+
         # Late imports to avoid circular dependencies (these modules
         # transitively import from cuda_graph_runner).
-        if model_runner.server_args.enable_breakable_cuda_graph:
+        if backend == BACKEND_BREAKABLE:
             from sglang.srt.model_executor.breakable_cuda_graph_runner import (
                 BreakableCudaGraphRunner,
             )
 
             return BreakableCudaGraphRunner(model_runner)
 
+        # Default + tcpcg: torch.compile-based piecewise.
         from sglang.srt.model_executor.piecewise_cuda_graph_runner import (
             PiecewiseCudaGraphRunner,
         )
