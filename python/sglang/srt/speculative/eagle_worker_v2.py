@@ -791,7 +791,7 @@ class EAGLEWorkerV2(BaseSpecWorker):
             self.target_worker.model_runner.attn_backend.update_verify_buffers_to_fill_after_draft(
                 verify_input,
                 (
-                    self.target_worker.model_runner.graph_runner.bs
+                    self.target_worker.model_runner.decode_cuda_graph_runner.bs
                     if can_run_cuda_graph
                     else None
                 ),

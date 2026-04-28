@@ -229,7 +229,7 @@ class EAGLEWorker(TpModelWorker):
                         draft_attn_backend=self.draft_attn_backend,
                         cuda_graph_runner=self.cuda_graph_runner,
                         target_attn_backend=self.target_worker.model_runner.attn_backend,
-                        target_graph_runner=self.target_worker.model_runner.graph_runner,
+                        target_graph_runner=self.target_worker.model_runner.decode_cuda_graph_runner,
                         draft_extend_attn_backend=self.draft_extend_attn_backend,
                         cuda_graph_runner_for_draft_extend=self.cuda_graph_runner_for_draft_extend,
                     )
@@ -323,7 +323,7 @@ class EAGLEWorker(TpModelWorker):
         self.cuda_graph_runner = state.cuda_graph_runner
         # Verify stage
         self.target_worker.model_runner.attn_backend = state.target_attn_backend
-        self.target_worker.model_runner.graph_runner = state.target_graph_runner
+        self.target_worker.model_runner.decode_cuda_graph_runner = state.target_graph_runner
         # Extend stage
         self.draft_extend_attn_backend = state.draft_extend_attn_backend
         self.cuda_graph_runner_for_draft_extend = (

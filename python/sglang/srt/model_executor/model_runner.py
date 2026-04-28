@@ -727,7 +727,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         self.init_routed_experts_capturer()
 
         # TODO: Refactor device-specific init branches into platform interface (separate PR).
-        # Must be called BEFORE init_device_graphs() so CUDA graph capture
+        # Must be called BEFORE init_decode_cuda_graph() so CUDA graph capture
         # runs with aux hidden state capture enabled.
         self.init_aux_hidden_state_capture()
 
@@ -736,19 +736,19 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             self.init_attention_backend()
             self.kernel_warmup()
             self._pre_initialize_flashinfer_allreduce_workspace()
-            self.init_device_graphs()
+            self.init_decode_cuda_graph()
         elif self.device in ["npu", "cpu"]:
             self.init_attention_backend()
-            self.init_device_graphs()
+            self.init_decode_cuda_graph()
         elif current_platform.is_out_of_tree():
             self.init_attention_backend()
             if current_platform.support_cuda_graph():
-                self.init_device_graphs()
+                self.init_decode_cuda_graph()
             else:
-                self.graph_runner = None
+                self.decode_cuda_graph_runner = None
                 self.graph_mem_usage = 0
         else:
-            self.graph_runner = None
+            self.decode_cuda_graph_runner = None
             self.graph_mem_usage = 0
             self.init_attention_backend()
 
@@ -756,7 +756,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             register_forward_hooks(self.model, server_args.forward_hooks)
 
         # Initialize piecewise CUDA graph
-        self.init_piecewise_cuda_graphs()
+        self.init_prefill_cuda_graph()
 
         self.prealloc_symmetric_memory_pool()
 
@@ -1524,7 +1524,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                 and current_platform.support_cuda_graph()
             )
         ):
-            self.init_device_graphs()
+            self.init_decode_cuda_graph()
 
         logger.info("Update weights end.")
         return True, "Succeeded to update model weights."
@@ -2583,9 +2583,9 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             ignore_tokens=None,
         )
 
-    def init_device_graphs(self):
+    def init_decode_cuda_graph(self):
         """Capture device graphs."""
-        self.graph_runner = None
+        self.decode_cuda_graph_runner = None
         self.graph_mem_usage = 0
 
         if not self.is_generation:
@@ -2617,7 +2617,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         )
         if current_platform.is_out_of_tree():
             GraphRunnerCls = current_platform.get_graph_runner_cls()
-            self.graph_runner = GraphRunnerCls(self)
+            self.decode_cuda_graph_runner = GraphRunnerCls(self)
         else:
             from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (
                 DecodeCudaGraphRunner,
@@ -2630,7 +2630,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
                     "npu": NPUGraphRunner,
                 },
             )
-            self.graph_runner = graph_runners[self.device](self)
+            self.decode_cuda_graph_runner = graph_runners[self.device](self)
 
         after_mem = get_available_gpu_memory(self.device, self.gpu_id)
         self.graph_mem_usage = before_mem - after_mem
@@ -2639,9 +2639,9 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             f"mem usage={self.graph_mem_usage:.2f} GB. avail mem={after_mem:.2f} GB."
         )
 
-    def init_piecewise_cuda_graphs(self):
+    def init_prefill_cuda_graph(self):
         """Initialize piecewise CUDA graph runner."""
-        self.piecewise_cuda_graph_runner = None
+        self.prefill_cuda_graph_runner = None
 
         if self.server_args.disable_piecewise_cuda_graph:
             logger.info(
@@ -2759,7 +2759,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             f"Capture piecewise CUDA graph begin. avail mem={before_mem:.2f} GB"
         )
 
-        self.piecewise_cuda_graph_runner = PrefillCudaGraphRunner(self)
+        self.prefill_cuda_graph_runner = PrefillCudaGraphRunner(self)
 
         after_mem = get_available_gpu_memory(self.device, self.gpu_id)
         mem_usage = before_mem - after_mem
@@ -2867,13 +2867,13 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             kwargs["get_embedding"] = True
 
         can_run_graph = (
-            self.piecewise_cuda_graph_runner is not None
-            and self.piecewise_cuda_graph_runner.can_run(forward_batch)
+            self.prefill_cuda_graph_runner is not None
+            and self.prefill_cuda_graph_runner.can_run(forward_batch)
         )
 
         if can_run_graph:
             return (
-                self.piecewise_cuda_graph_runner.replay(forward_batch, **kwargs),
+                self.prefill_cuda_graph_runner.replay(forward_batch, **kwargs),
                 can_run_graph,
             )
 
@@ -2996,7 +2996,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         output.routed_experts_output = get_global_experts_capturer().on_forward_end(
             forward_batch=forward_batch,
             can_run_graph=output.can_run_graph,
-            cuda_graph_batch=getattr(self.graph_runner, "bs", None),
+            cuda_graph_batch=getattr(self.decode_cuda_graph_runner, "bs", None),
             no_copy_to_cpu=no_copy_to_cpu,
         )
 
@@ -3027,8 +3027,8 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         )
         can_run_graph = bool(
             mode_check()
-            and self.graph_runner
-            and self.graph_runner.can_run(forward_batch)
+            and self.decode_cuda_graph_runner
+            and self.decode_cuda_graph_runner.can_run(forward_batch)
         )
 
         if (
@@ -3038,7 +3038,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
             self.hisparse_coordinator.wait_for_pending_backup()
 
         if can_run_graph:
-            ret = self.graph_runner.replay(
+            ret = self.decode_cuda_graph_runner.replay(
                 forward_batch,
                 skip_attn_backend_init=skip_attn_backend_init,
                 pp_proxy_tensors=pp_proxy_tensors,

@@ -254,25 +254,18 @@ def _parse_canonical(server_args: "ServerArgs") -> None:
 # ---------------------------------------------------------------------------
 
 
-def _downgrade_unsupported_combinations(server_args: "ServerArgs") -> None:
-    """Silently rewrite combinations that are accepted at parse time but
-    not actually wired. Today this is only ``(prefill, full)``.
-
-    Emits a warning so the user knows their requested config didn't take
-    effect. Decode-side ``full`` is unaffected.
+def _reject_unsupported_combinations(server_args: "ServerArgs") -> None:
+    """Reject (phase, backend) combinations that are accepted at parse
+    time but not implemented. Today this is only ``(prefill, full)``.
     """
     mode = server_args.cuda_graph_mode or {}
     if mode.get(PHASE_PREFILL) == BACKEND_FULL:
-        logger.warning(
-            "(prefill, full) is not implemented — full CUDA graph "
-            "capture for prefill only fits fixed-shape deployments. "
-            "Downgrading prefill to 'disabled' for this server. "
-            "Use 'breakable' or 'tcpcg' for prefill if you want CUDA "
-            "graphs there."
+        raise NotImplementedError(
+            "--cuda-graph-mode prefill='full' is not supported. Full CUDA "
+            "graph capture only fits fixed-shape deployments and prefill "
+            "is variable-shape. Use 'breakable' or 'tcpcg' for prefill, "
+            "or 'disabled' to skip cuda graphs there."
         )
-        mode = dict(mode)
-        mode[PHASE_PREFILL] = BACKEND_DISABLED
-        server_args.cuda_graph_mode = mode
 
 
 # ---------------------------------------------------------------------------
@@ -314,5 +307,5 @@ def resolve_cuda_graph_config(server_args: "ServerArgs") -> None:
     _parse_canonical(server_args)
     _apply_piecewise_compatibility(server_args)
     _parse_canonical(server_args)
-    _downgrade_unsupported_combinations(server_args)
+    _reject_unsupported_combinations(server_args)
     _validate_canonical(server_args)
