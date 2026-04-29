@@ -13,7 +13,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from sglang.srt.model_executor.cuda_graph_backend.base import BaseCudaGraphBackend
+from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import (
+    BaseCudaGraphBackend,
+)
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
     BreakableCudaGraphBackend,
 )

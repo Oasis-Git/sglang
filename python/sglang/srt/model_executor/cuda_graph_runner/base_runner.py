@@ -32,7 +32,9 @@ from sglang.srt.layers.dp_attention import (
 )
 
 if TYPE_CHECKING:
-    from sglang.srt.model_executor.cuda_graph_backend.base import BaseCudaGraphBackend
+    from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import (
+        BaseCudaGraphBackend,
+    )
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
     from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
     from sglang.srt.model_executor.model_runner import ModelRunner
