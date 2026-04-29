@@ -646,7 +646,7 @@ class MultiLayerEagleMultiStepDraftExtendCudaGraphRunner:
         self._init_and_capture()
 
     def _init_and_capture(self):
-        if self.eagle_worker.server_args.disable_cuda_graph:
+        if self.eagle_worker.server_args.cuda_graph_mode["decode"] == "disabled":
             self.runners = [None] * self.speculative_num_steps
             return
 

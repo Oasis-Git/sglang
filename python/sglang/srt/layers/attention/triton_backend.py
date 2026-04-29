@@ -130,7 +130,7 @@ class TritonAttnBackend(AttentionBackend):
         self.max_kv_splits = model_runner.server_args.triton_attention_num_kv_splits
 
         self.allow_bidirectional_attention_in_extend = (
-            model_runner.server_args.disable_cuda_graph
+            model_runner.server_args.cuda_graph_mode["decode"] == "disabled"
             and (model_runner.server_args.chunked_prefill_size == -1)
         )
 

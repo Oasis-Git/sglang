@@ -2086,7 +2086,7 @@ class DeepseekV2Model(nn.Module):
             # NOTE: torch dynamo does not support graph break in context manager
             ctx = (
                 nullcontext()
-                if not get_global_server_args().disable_piecewise_cuda_graph
+                if get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
                 else get_global_expert_distribution_recorder().with_current_layer(i)
             )
             with ctx:

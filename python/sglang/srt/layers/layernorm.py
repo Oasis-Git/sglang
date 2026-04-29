@@ -332,7 +332,7 @@ class RMSNorm(MultiPlatformOp):
         residual: Optional[torch.Tensor] = None,
         post_residual_addition: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        if not get_global_server_args().disable_piecewise_cuda_graph:
+        if get_global_server_args().cuda_graph_mode["prefill"] != "disabled":
             return self.forward_native(x, residual, post_residual_addition)
 
         if not x.is_contiguous():

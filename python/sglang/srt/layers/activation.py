@@ -106,7 +106,7 @@ class SiluAndMul(MultiPlatformOp):
         return out
 
     def forward_musa(self, x: torch.Tensor) -> torch.Tensor:
-        if not get_global_server_args().disable_piecewise_cuda_graph:
+        if get_global_server_args().cuda_graph_mode["prefill"] != "disabled":
             return self.forward_native(x)
 
         if not hasattr(self, "_musa_swish_glu"):

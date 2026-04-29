@@ -426,7 +426,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or not get_global_server_args().disable_piecewise_cuda_graph
+            or get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

@@ -187,7 +187,7 @@ class Qwen3GatedDeltaNet(nn.Module):
                 device=torch.get_device_module().current_device(),
                 dtype=config.torch_dtype,
             )
-            if not get_global_server_args().disable_piecewise_cuda_graph
+            if get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
@@ -359,7 +359,7 @@ class Qwen3GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or not get_global_server_args().disable_piecewise_cuda_graph
+            or get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

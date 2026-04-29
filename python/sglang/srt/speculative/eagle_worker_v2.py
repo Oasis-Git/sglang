@@ -121,8 +121,8 @@ class EagleDraftWorker(BaseDraftWorker):
 
         # Do not capture cuda graph in `TpModelWorker` init,
         # will capture later with init_cuda_graphs()
-        backup_disable_cuda_graph = server_args.disable_cuda_graph
-        server_args.disable_cuda_graph = True
+        backup_decode_mode = server_args.cuda_graph_mode["decode"]
+        server_args.cuda_graph_mode["decode"] = "disabled"
 
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
@@ -169,7 +169,7 @@ class EagleDraftWorker(BaseDraftWorker):
         self.init_lm_head()
 
         # Init attention backend and cuda graphs
-        self.draft_runner.server_args.disable_cuda_graph = backup_disable_cuda_graph
+        self.draft_runner.server_args.cuda_graph_mode["decode"] = backup_decode_mode
         self.draft_tp_context = (
             draft_tp_context if server_args.enable_dp_attention else empty_context
         )
@@ -256,7 +256,7 @@ class EagleDraftWorker(BaseDraftWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.disable_cuda_graph:
+        if self.server_args.cuda_graph_mode["decode"] == "disabled":
             return
 
         if self.server_args.model_impl == "mindspore":

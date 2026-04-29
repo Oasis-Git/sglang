@@ -109,8 +109,8 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
 
         # Do not capture cuda graph in `TpModelWorker` init,
         # will capture later with init_cuda_graphs()
-        backup_disable_cuda_graph = server_args.disable_cuda_graph
-        server_args.disable_cuda_graph = True
+        backup_decode_mode = server_args.cuda_graph_mode["decode"]
+        server_args.cuda_graph_mode["decode"] = "disabled"
 
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
@@ -159,8 +159,8 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
 
         # Init attention backend and cuda graphs
         for i in range(self.speculative_num_steps):
-            self.draft_runner_list[i].server_args.disable_cuda_graph = (
-                backup_disable_cuda_graph
+            self.draft_runner_list[i].server_args.cuda_graph_mode["decode"] = (
+                backup_decode_mode
             )
         self.draft_tp_context = (
             draft_tp_context if server_args.enable_dp_attention else empty_context
@@ -206,7 +206,7 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.disable_cuda_graph:
+        if self.server_args.cuda_graph_mode["decode"] == "disabled":
             return
 
         self.cuda_graph_runner_for_draft_extend = (

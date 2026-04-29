@@ -680,7 +680,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         # Init lora
         if server_args.enable_lora:
             self.init_lora_manager()
-            if not server_args.disable_cuda_graph:
+            if server_args.cuda_graph_mode["decode"] != "disabled":
                 # Phase 1 of LoRA CUDA graph init: pre-allocate large MoE
                 # intermediate buffers before init_memory_pool() so memory
                 # profiling accounts for them.  Phase 2 (dense LoRA batch
@@ -2595,7 +2595,10 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         if self.server_args.model_impl.lower() == ModelImpl.MINDSPORE:
             return
 
-        if self.device != "cpu" and self.server_args.disable_cuda_graph:
+        if (
+            self.device != "cpu"
+            and self.server_args.cuda_graph_mode["decode"] == "disabled"
+        ):
             return
 
         if self.device == "cpu" and not self.server_args.enable_torch_compile:
@@ -2643,20 +2646,11 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         """Initialize piecewise CUDA graph runner."""
         self.prefill_cuda_graph_runner = None
 
-        if self.server_args.disable_piecewise_cuda_graph:
+        if (self.server_args.cuda_graph_mode or {}).get("prefill") == "disabled":
             logger.info(
-                "Disable piecewise CUDA graph because --disable-piecewise-cuda-graph is set"
-            )
-            return
-
-        # If cuda_graph_mode resolved prefill to "disabled" (e.g., via
-        # --prefill-disable-cuda-graph, the (prefill, full) downgrade,
-        # or the legacy disable flag), skip construction.
-        prefill_mode = (self.server_args.cuda_graph_mode or {}).get("prefill")
-        if prefill_mode == "disabled":
-            logger.info(
-                "Disable piecewise CUDA graph because cuda_graph_mode "
-                "resolved prefill='disabled'"
+                "Disable prefill CUDA graph because cuda_graph_mode resolved "
+                "prefill='disabled' (e.g. via --disable-piecewise-cuda-graph, "
+                "--prefill-disable-cuda-graph, or auto-disable rules)."
             )
             return
 

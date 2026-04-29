@@ -411,7 +411,7 @@ class Qwen3DecoderLayer(nn.Module):
             cache=(
                 [self.mlp.gate_up_proj.weight, self.mlp.down_proj.weight]
                 if _is_npu
-                and not get_global_server_args().disable_piecewise_cuda_graph
+                and get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
                 and (
                     hasattr(self.mlp.gate_up_proj, "weight")
                     and hasattr(self.mlp.down_proj, "weight")

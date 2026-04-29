@@ -234,7 +234,7 @@ class SchedulerDPAttnMixin:
             attn_cp_size=self.attn_cp_size,
             tp_group=self.tp_group,
             get_idle_batch=self.get_idle_batch,
-            disable_cuda_graph=self.server_args.disable_cuda_graph,
+            disable_cuda_graph=self.server_args.cuda_graph_mode["decode"] == "disabled",
             require_mlp_tp_gather=require_mlp_tp_gather(self.server_args),
             disable_overlap_schedule=self.server_args.disable_overlap_schedule,
             offload_tags=self.offload_tags,
