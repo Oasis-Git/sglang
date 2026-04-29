@@ -1,8 +1,13 @@
-"""Phase / backend identifiers and the canonical default for
-``cuda_graph_mode``. Pure constants — no torch / sglang.srt deps —
-so ``ServerArgs`` and other lightweight modules can import these at
-module level without pulling in backend classes.
+"""Phase / backend identifiers, the canonical default for
+``cuda_graph_mode``, and the ``--cuda-graph-mode`` JSON CLI parser.
+Pure stdlib — no torch / sglang.srt deps — so ``ServerArgs`` can
+import everything here at module level without pulling in backend
+classes.
 """
+
+import argparse
+import json
+from typing import Dict
 
 PHASE_DECODE = "decode"
 PHASE_PREFILL = "prefill"
@@ -25,3 +30,16 @@ DEFAULT_CUDA_GRAPH_MODE = {
     PHASE_DECODE: BACKEND_FULL,
     PHASE_PREFILL: BACKEND_TCPCG,
 }
+
+
+def parse_cuda_graph_mode_arg(raw: str) -> Dict[str, str]:
+    """argparse type for ``--cuda-graph-mode``: parse JSON dict of phase → backend."""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise argparse.ArgumentTypeError(f"--cuda-graph-mode must be JSON: {e}")
+    if not isinstance(parsed, dict):
+        raise argparse.ArgumentTypeError(
+            f"--cuda-graph-mode must be a JSON object, got {type(parsed).__name__}"
+        )
+    return {str(k): str(v) for k, v in parsed.items()}

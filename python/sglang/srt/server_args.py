@@ -43,6 +43,7 @@ from sglang.srt.model_executor.cuda_graph_mode import (
     DEFAULT_CUDA_GRAPH_MODE,
     PHASE_DECODE,
     PHASE_PREFILL,
+    parse_cuda_graph_mode_arg,
 )
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 from sglang.srt.utils.common import (
@@ -5932,32 +5933,14 @@ class ServerArgs:
             "Useful for debugging CUDA graph capture / replay issues.",
         )
 
-        # Canonical per-phase CUDA graph configuration.
-        def _cuda_graph_mode_type(raw: str) -> Dict[str, str]:
-            import json
-
-            try:
-                parsed = json.loads(raw)
-            except json.JSONDecodeError as e:
-                raise argparse.ArgumentTypeError(
-                    f"--cuda-graph-mode must be a JSON object, got: {raw!r} ({e})"
-                ) from e
-            if not isinstance(parsed, dict):
-                raise argparse.ArgumentTypeError(
-                    f"--cuda-graph-mode must decode to a JSON object, got {type(parsed).__name__}"
-                )
-            return {str(k): str(v) for k, v in parsed.items()}
-
         parser.add_argument(
             "--cuda-graph-mode",
-            type=_cuda_graph_mode_type,
+            type=parse_cuda_graph_mode_arg,
             default=ServerArgs.cuda_graph_mode,
-            help="Canonical per-phase CUDA graph configuration as a JSON "
-            "object, e.g. '{\"decode\":\"full\",\"prefill\":\"breakable\"}'. "
-            "Allowed values per phase: full, breakable, tcpcg, disabled. "
-            "Convenience flags (--{prefill,decode}-cuda-graph-backend, "
-            "--{prefill,decode}-disable-cuda-graph) sugar a single phase; "
-            "this JSON sets both phases at once and wins on conflict.",
+            help='Per-phase CUDA graph mode as JSON, e.g. '
+            '\'{"decode":"full","prefill":"breakable"}\'. '
+            "Allowed per phase: full, breakable, tcpcg, disabled. "
+            "JSON wins over the per-phase --{prefill,decode}-* flags.",
         )
 
         # Per-phase convenience flags. Each maps to a single phase of the
