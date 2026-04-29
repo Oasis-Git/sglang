@@ -108,7 +108,7 @@ class BaseCudaGraphBackend(ABC):
     # -----------------------------------------------------------------
     def setup_prefill_state(self, runner) -> None:
         """One-time hook called by ``PrefillCudaGraphRunner.__init__``
-        before ``prepare()``. BCG allocates its static prefill buffers
+        before ``prepare()``. Breakable allocates its static prefill buffers
         here; other backends no-op.
         """
         pass
@@ -121,7 +121,7 @@ class BaseCudaGraphBackend(ABC):
         num_tokens: int,
     ) -> None:
         """Mutate ``kwargs`` in place during capture-time dummy
-        ``ForwardBatch`` construction. BCG swaps in stable-address
+        ``ForwardBatch`` construction. Breakable swaps in stable-address
         static tensors so captured segments read from fixed pointers;
         other backends no-op (runner falls back to fresh literals).
         """
@@ -129,6 +129,6 @@ class BaseCudaGraphBackend(ABC):
 
     def commit_prefill_serving_inputs(self, forward_batch: "ForwardBatch") -> None:
         """Replay-time hook: copy serving-batch values into backend
-        static buffers (BCG); other backends no-op.
+        static buffers (Breakable); other backends no-op.
         """
         pass

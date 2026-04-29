@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 
 
-# Names of the static prefill input tensors BCG owns. Each is a
+# Names of the static prefill input tensors Breakable owns. Each is a
 # 1-D int64 tensor of length max_bs; captured segments read from these
 # stable addresses.
 _PREFILL_STATIC_FIELDS = (
@@ -89,7 +89,7 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
             )
 
     # -----------------------------------------------------------------
-    # Prefill hooks (BCG needs stable addresses for captured segments)
+    # Prefill hooks (Breakable needs stable addresses for captured segments)
     # -----------------------------------------------------------------
     def setup_prefill_state(self, runner) -> None:
         """Allocate static prefill input buffers. Called by
@@ -110,7 +110,7 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
         bs: int,
         num_tokens: int,
     ) -> None:
-        """Swap fresh literals in ``kwargs`` for BCG's static buffers
+        """Swap fresh literals in ``kwargs`` for Breakable's static buffers
         (sliced to ``bs``) so captured segments read from fixed
         pointers.
         """
@@ -149,9 +149,9 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
             s["orig_seq_lens"][:bs].copy_(forward_batch.orig_seq_lens)
 
     def can_run(self, forward_batch: "ForwardBatch") -> bool:
-        # BCG-prefill captures bs=1 only — multi-req would silently return
+        # Breakable-prefill captures bs=1 only — multi-req would silently return
         # wrong-shaped logits, corrupting downstream output_ids. The
-        # presence of ``_prefill_static`` marks "this BCG instance is
+        # presence of ``_prefill_static`` marks "this Breakable instance is
         # being used as a prefill backend".
         if self._prefill_static is not None and forward_batch.batch_size > 1:
             return False

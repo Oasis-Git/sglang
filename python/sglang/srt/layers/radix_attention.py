@@ -126,7 +126,7 @@ class RadixAttention(nn.Module):
             else:
                 output = torch.empty_like(q)
             if is_in_breakable_cuda_graph():
-                bcg_unified_attention_with_output(
+                breakable_unified_attention_with_output(
                     q, k, v, output, save_kv_cache, self.layer_id, **kwargs
                 )
             else:
@@ -216,4 +216,4 @@ def unified_attention_with_output(
     return
 
 
-bcg_unified_attention_with_output = eager_on_graph(True)(unified_attention_with_output)
+breakable_unified_attention_with_output = eager_on_graph(True)(unified_attention_with_output)

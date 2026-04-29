@@ -130,7 +130,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
 
         # --- backend ---------------------------------------------------
         # Backends needing stable addresses for captured prefill segments
-        # (today: only BCG) allocate their own static buffers in
+        # (today: only Breakable) allocate their own static buffers in
         # ``setup_prefill_state``. Other backends no-op.
         self.backend = resolve_prefill_backend(model_runner)
         self.backend.setup_prefill_state(self)
@@ -160,7 +160,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
         """Build a dummy prefill ForwardBatch for capture/warmup at this shape.
 
         Default tensor inputs are fresh literals; backends that need
-        stable addresses for captured segments (BCG) override via
+        stable addresses for captured segments (Breakable) override via
         ``populate_prefill_dummy_inputs`` to swap in static buffers.
         """
         buffers = self.buffers
@@ -301,7 +301,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                     return False
         if num_tokens > self.max_num_tokens:
             return False
-        # Backend-level checks (e.g. BCG rejects bs>1 prefill).
+        # Backend-level checks (e.g. Breakable rejects bs>1 prefill).
         return self.backend.can_run(forward_batch)
 
     # -----------------------------------------------------------------
@@ -483,7 +483,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
             self.model_runner.token_to_kv_pool.set_swa_loc(out_cache_loc_swa)
 
         # Backends that need stable addresses for captured segments
-        # (BCG) commit serving-time values into their static buffers.
+        # (Breakable) commit serving-time values into their static buffers.
         # Other backends no-op.
         self.backend.commit_prefill_serving_inputs(forward_batch)
 

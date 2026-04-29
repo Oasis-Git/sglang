@@ -1198,7 +1198,7 @@ class ServerArgs:
 
     def _apply_cuda_graph_compatibility(self):
         """Auto-disable prefill cuda graph for incompatible configs.
-        Rules are split per backend — TCPiecewise and BCG have different
+        Rules are split per backend — TCPiecewise and Breakable have different
         constraints. ``--enforce-piecewise-cuda-graph`` bypasses
         everything.
         """
@@ -1207,7 +1207,7 @@ class ServerArgs:
         if self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_TCPIECEWISE:
             self._disable_tcpiecewise_if_incompatible()
         elif self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_BREAKABLE:
-            self._disable_bcg_if_incompatible()
+            self._disable_breakable_if_incompatible()
 
     def _disable_tcpiecewise_if_incompatible(self):
         """TCPiecewise (torch.compile + piecewise) is incompatible with
@@ -1264,8 +1264,8 @@ class ServerArgs:
             if predicate():
                 self.cuda_graph_mode[PHASE_PREFILL] = BACKEND_DISABLED
 
-    def _disable_bcg_if_incompatible(self):
-        """BCG (segmented capture, no torch.compile). BCG enforces HIP
+    def _disable_breakable_if_incompatible(self):
+        """Breakable (segmented capture, no torch.compile). Breakable enforces HIP
         / memory-saver rejection in its own ``__init__``; config-time
         rules can be added here as they're discovered.
         """

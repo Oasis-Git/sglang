@@ -11,10 +11,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Runtime state for the breakable CUDA graph (BCG) runner.
+"""Runtime state for the breakable CUDA graph (Breakable) runner.
 
 Kept intentionally separate from ``compilation/piecewise_context_manager.py``:
-BCG no longer inherits from the torch.compile-based PCG path, so its
+Breakable no longer inherits from the torch.compile-based PCG path, so its
 capture/replay lifecycle is managed on its own.
 """
 

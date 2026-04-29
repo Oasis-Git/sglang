@@ -1,9 +1,9 @@
-"""BCG primitives — segmented CUDA graph capture with eager break points.
+"""Breakable primitives — segmented CUDA graph capture with eager break points.
 
 Public API (also reachable via the deeper module paths):
   - ``BreakableCUDAGraph``, ``BreakableCUDAGraphCapture`` — capture/replay
   - ``eager_on_graph`` — decorator that marks a callable as a graph break
-  - ``enable_breakable_cuda_graph`` — context that flips the BCG runtime flag
+  - ``enable_breakable_cuda_graph`` — context that flips the Breakable runtime flag
   - ``is_in_breakable_cuda_graph`` — runtime flag getter
 
 The legacy ``model_executor/breakable_cuda_graph/`` package is a

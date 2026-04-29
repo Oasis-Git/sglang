@@ -140,9 +140,9 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         the compile-loop pass so torch.compile finishes FX/inductor
         compilation for every shape. Per-shape *cuda graph capture* is
         not done here — that lives in ``capture_one`` (matches Full /
-        BCG: prepare = setup, capture_one = warmup + record).
+        Breakable: prepare = setup, capture_one = warmup + record).
 
-        Phase breakdown for tcpiecewise, paired with what Full / BCG do:
+        Phase breakdown for tcpiecewise, paired with what Full / Breakable do:
 
           1. JIT-kernel-activate forward (1 call at smallest shape):
              warms shared CUDA kernels before torch.compile sees the
@@ -155,7 +155,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
              ``cuda_piecewise_backend:143``) so this only triggers
              FX/inductor compilation. tcpiecewise-only.
           4. Per-shape warmup + record: handled by ``capture_one``;
-             matches Full / BCG's 2x warmup + 1x capture pattern.
+             matches Full / Breakable's 2x warmup + 1x capture pattern.
 
         Requires the runner to expose:
           - ``runner.model_runner.server_args``
@@ -264,7 +264,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         second call triggers the actual cuda-graph capture because
         we are inside ``capture_session`` (which sets
         ``set_pcg_capture_stream`` and ``enable_piecewise_cuda_graph``).
-        Mirrors Full / BCG's 2x warmup + 1x capture pattern.
+        Mirrors Full / Breakable's 2x warmup + 1x capture pattern.
         """
         for _ in range(2):
             self._device_module.synchronize()
