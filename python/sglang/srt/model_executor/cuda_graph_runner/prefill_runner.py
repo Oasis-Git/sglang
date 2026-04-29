@@ -333,12 +333,13 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                         capture_range.set_description(
                             f"Capturing num tokens ({num_tokens=} {avail_mem=:.2f} GB)"
                         )
-                    self.capture_one_num_tokens(num_tokens)
+                    self.capture_one_shape(num_tokens)
 
-    def capture_one_num_tokens(self, num_tokens: int) -> None:
+    def capture_one_shape(self, size: int) -> None:
         """Per-shape capture: build dummy ForwardBatch + run_once,
-        delegate to backend.
+        delegate to backend. ``size`` is the prefill token count.
         """
+        num_tokens = size
         forward_batch = self._build_capture_forward_batch(num_tokens)
         self.model_runner.attn_backend.init_forward_metadata(forward_batch)
 

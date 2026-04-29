@@ -441,7 +441,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                         num_tokens=bs * self.num_tokens_per_bs,
                         tp_group=self.model_runner.tp_group,
                     ) as forward:
-                        self.capture_one_batch_size(
+                        self.capture_one_shape(
                             bs, forward, stream_idx, variant_label
                         )
 
@@ -467,15 +467,16 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             self._post_process_after_profile(prof)
 
     # -----------------------------------------------------------------
-    # capture_one_batch_size — per-shape capture
+    # capture_one_shape — per-shape capture (size = batch size for decode)
     # -----------------------------------------------------------------
-    def capture_one_batch_size(
+    def capture_one_shape(
         self,
-        bs: int,
+        size: int,
         forward: Callable,
         stream_idx: Optional[int] = None,
         variant_label: Optional[str] = None,
     ):
+        bs = size
         buffers: DecodeInputBuffers = self.buffers
         num_tokens = bs * self.num_tokens_per_bs
 
