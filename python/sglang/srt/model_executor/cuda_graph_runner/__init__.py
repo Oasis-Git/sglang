@@ -25,8 +25,10 @@ from sglang.srt.model_executor.cuda_graph_runner.base_runner import (  # noqa: F
     freeze_gc,
     get_batch_sizes_to_capture,
 )
-from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (  # noqa: F401
+from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (
     DecodeCudaGraphRunner,
+)
+from sglang.srt.model_executor.cuda_graph_runner.decode_runner import (  # noqa: F401
     _make_graph_key as _default_make_graph_key,
 )
 from sglang.srt.model_executor.cuda_graph_runner.prefill_runner import (  # noqa: F401

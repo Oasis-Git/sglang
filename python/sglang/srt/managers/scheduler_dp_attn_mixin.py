@@ -9,10 +9,10 @@ from sglang.srt.batch_overlap.two_batch_overlap import TboDPAttentionPreparer
 from sglang.srt.distributed.parallel_state import get_tp_group
 from sglang.srt.environ import envs
 from sglang.srt.managers.schedule_batch import ScheduleBatch
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.model_executor.forward_batch_info import ForwardMode
 from sglang.srt.observability.metrics_collector import DPCooperationInfo
 from sglang.srt.utils.common import require_mlp_tp_gather
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if TYPE_CHECKING:
     from sglang.srt.distributed.parallel_state import GroupCoordinator
@@ -235,7 +235,8 @@ class SchedulerDPAttnMixin:
             attn_cp_size=self.attn_cp_size,
             tp_group=self.tp_group,
             get_idle_batch=self.get_idle_batch,
-            disable_cuda_graph=self.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED,
+            disable_cuda_graph=self.server_args.cuda_graph_mode[Phase.DECODE]
+            == Backend.DISABLED,
             require_mlp_tp_gather=require_mlp_tp_gather(self.server_args),
             disable_overlap_schedule=self.server_args.disable_overlap_schedule,
             offload_tags=self.offload_tags,

@@ -5971,7 +5971,7 @@ class ServerArgs:
             "--cuda-graph-mode",
             type=parse_cuda_graph_mode_arg,
             default=ServerArgs.cuda_graph_mode,
-            help='Per-phase CUDA graph mode as JSON, e.g. '
+            help="Per-phase CUDA graph mode as JSON, e.g. "
             '\'{"decode":"full","prefill":"breakable"}\'. '
             "Allowed per phase: full, breakable, tcpiecewise, disabled. "
             "JSON wins over the per-phase --{prefill,decode}-* flags.",
@@ -5983,7 +5983,7 @@ class ServerArgs:
             choices=Backend.ALL,
             default=ServerArgs.prefill_cuda_graph_backend,
             help="Backend for the prefill (extend) phase. Equivalent to "
-            "``--cuda-graph-mode '{\"prefill\":\"...\"}'`` (no decode change).",
+            '``--cuda-graph-mode \'{"prefill":"..."}\'`` (no decode change).',
         )
         parser.add_argument(
             "--decode-cuda-graph-backend",
@@ -5991,7 +5991,7 @@ class ServerArgs:
             choices=Backend.ALL,
             default=ServerArgs.decode_cuda_graph_backend,
             help="Backend for the decode phase. Equivalent to "
-            "``--cuda-graph-mode '{\"decode\":\"...\"}'`` (no prefill change).",
+            '``--cuda-graph-mode \'{"decode":"..."}\'`` (no prefill change).',
         )
         parser.add_argument(
             "--prefill-disable-cuda-graph",

@@ -38,9 +38,6 @@ from sglang.srt.compilation.torch_compile_decoration import (
     set_torch_compile_config,
 )
 from sglang.srt.distributed import get_tensor_model_parallel_rank
-from sglang.srt.distributed.device_communicators.pynccl_allocator import (
-    set_graph_pool_id,
-)
 from sglang.srt.distributed.parallel_state import (
     graph_capture,
     set_pdmux_status,
@@ -58,9 +55,6 @@ from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend im
     BreakableCudaGraphBackend,
 )
 from sglang.srt.model_executor.cuda_graph_backend.factory import resolve_decode_backend
-from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
-    FullCudaGraphBackend,
-)
 from sglang.srt.model_executor.cuda_graph_backend_utils import (
     CUDA_GRAPH_CAPTURE_FAILED_MSG,
 )
@@ -97,7 +91,6 @@ from sglang.srt.utils import (
     require_mlp_sync,
     require_mlp_tp_gather,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Phase
 
 try:
     from kt_kernel import KTMoEWrapper
@@ -110,6 +103,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner
+
 
 def _make_graph_key(bs, stream_idx=None, variant_label=None):
     """Build a graph dict key from batch size, stream index, and lora variant.
@@ -148,7 +142,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         self.require_mlp_tp_gather = require_mlp_tp_gather(model_runner.server_args)
         self.require_mlp_sync = require_mlp_sync(model_runner.server_args)
         self.require_attn_tp_gather = require_attn_tp_gather(model_runner.server_args)
-        self.enable_two_batch_overlap = model_runner.server_args.enable_two_batch_overlap
+        self.enable_two_batch_overlap = (
+            model_runner.server_args.enable_two_batch_overlap
+        )
         self.use_ngram_embedding = model_runner.use_ngram_embedding
         if self.use_ngram_embedding:
             hf_config = model_runner.model_config.hf_config
@@ -273,8 +269,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                 self.capture()
         except RuntimeError as e:
             raise Exception(
-                f"Capture cuda graph failed: {e}\n"
-                f"{CUDA_GRAPH_CAPTURE_FAILED_MSG}"
+                f"Capture cuda graph failed: {e}\n" f"{CUDA_GRAPH_CAPTURE_FAILED_MSG}"
             )
 
     # -----------------------------------------------------------------
@@ -442,9 +437,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                         num_tokens=bs * self.num_tokens_per_bs,
                         tp_group=self.model_runner.tp_group,
                     ) as forward:
-                        self.capture_one_shape(
-                            bs, forward, stream_idx, variant_label
-                        )
+                        self.capture_one_shape(bs, forward, stream_idx, variant_label)
 
         with freeze_gc(self.model_runner.server_args.enable_cudagraph_gc):
             if not self.enable_pdmux:
@@ -483,9 +476,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
 
         # Sanity-check: --debug-cuda-graph requires breakable backend.
         if self.model_runner.server_args.debug_cuda_graph:
-            assert isinstance(self.backend, BreakableCudaGraphBackend), (
-                "Breakable CUDA graph is required for --debug-cuda-graph"
-            )
+            assert isinstance(
+                self.backend, BreakableCudaGraphBackend
+            ), "Breakable CUDA graph is required for --debug-cuda-graph"
 
         # Graph inputs
         input_ids = buffers.input_ids[:num_tokens]

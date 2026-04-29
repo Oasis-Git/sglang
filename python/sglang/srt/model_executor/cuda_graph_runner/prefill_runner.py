@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import torch
 import tqdm
@@ -63,7 +63,6 @@ from sglang.srt.model_executor.forward_batch_info import (
     PPProxyTensors,
 )
 from sglang.srt.utils import get_available_gpu_memory, is_npu, log_info_on_rank0
-from sglang.srt.model_executor.cuda_graph_mode import Phase
 
 # Suppress Dynamo warning about tracing through lru_cache-wrapped functions.
 warnings.filterwarnings("ignore", message=".*lru_cache.*", module="torch._dynamo")
@@ -352,9 +351,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
     # -----------------------------------------------------------------
     # replay_prepare
     # -----------------------------------------------------------------
-    def replay_prepare(
-        self, forward_batch: ForwardBatch, **kwargs
-    ) -> ForwardBatch:
+    def replay_prepare(self, forward_batch: ForwardBatch, **kwargs) -> ForwardBatch:
         """Pad, populate static buffers, and build the static_forward_batch
         the model code reads during replay.
         """

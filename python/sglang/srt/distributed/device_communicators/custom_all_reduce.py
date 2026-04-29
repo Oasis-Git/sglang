@@ -11,15 +11,15 @@ import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
 import sglang.srt.distributed.device_communicators.custom_all_reduce_ops as ops
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
-    is_in_tcpiecewise_cuda_graph,
-)
 from sglang.srt.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
 from sglang.srt.distributed.device_communicators.custom_all_reduce_utils import (
     can_use_custom_all_reduce_with_nvlink,
     is_weak_contiguous,
 )
 from sglang.srt.environ import envs
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+    is_in_tcpiecewise_cuda_graph,
+)
 from sglang.srt.utils import (
     get_bool_env_var,
     is_cuda,

@@ -8,12 +8,12 @@ from sglang.srt.layers.moe.utils import (
     speculative_moe_backend_context,
 )
 from sglang.srt.managers.tp_worker import TpModelWorker
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.eagle_worker import EAGLEWorker
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 from sglang.srt.speculative.spec_utils import draft_tp_context, load_token_map
 from sglang.srt.utils import empty_context, get_bool_env_var, is_cuda
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if is_cuda():
     from sgl_kernel import segment_packbits  # noqa: F401

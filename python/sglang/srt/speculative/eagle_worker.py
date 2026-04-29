@@ -25,6 +25,7 @@ from sglang.srt.mem_cache.common import (
     alloc_token_slots,
     get_last_loc,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
@@ -76,7 +77,6 @@ from sglang.srt.utils import (
     next_power_of_2,
 )
 from sglang.srt.utils.patch_torch import monkey_patch_torch_reductions
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_npu = is_npu()
 _is_musa = is_musa()
@@ -324,7 +324,9 @@ class EAGLEWorker(TpModelWorker):
         self.cuda_graph_runner = state.cuda_graph_runner
         # Verify stage
         self.target_worker.model_runner.attn_backend = state.target_attn_backend
-        self.target_worker.model_runner.decode_cuda_graph_runner = state.target_graph_runner
+        self.target_worker.model_runner.decode_cuda_graph_runner = (
+            state.target_graph_runner
+        )
         # Extend stage
         self.draft_extend_attn_backend = state.draft_extend_attn_backend
         self.cuda_graph_runner_for_draft_extend = (

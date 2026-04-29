@@ -34,6 +34,7 @@ import torch.distributed as dist
 from torch import nn
 
 from sglang.jit_kernel.ngram_embedding import update_token_table
+from sglang.srt.compilation.torch_compile_decoration import set_torch_compile_config
 from sglang.srt.configs import (
     BailingHybridConfig,
     FalconH1Config,
@@ -124,10 +125,9 @@ from sglang.srt.lora.lora_registry import LoRARef
 from sglang.srt.managers.schedule_batch import sanity_check_mm_pad_shift_value
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
-from sglang.srt.compilation.torch_compile_decoration import set_torch_compile_config
 from sglang.srt.model_executor.cpu_graph_runner import CPUGraphRunner
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.model_executor.cuda_graph_runner import (
-    DecodeCudaGraphRunner,
     DecodeInputBuffers,
     PrefillCudaGraphRunner,
 )
@@ -197,7 +197,6 @@ from sglang.srt.weight_sync.tensor_bucket import (
     FlattenedTensorBucket,
     FlattenedTensorMetadata,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_hip = is_hip()
 _is_npu = is_npu()

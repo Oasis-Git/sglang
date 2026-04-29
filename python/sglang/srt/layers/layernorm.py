@@ -26,6 +26,7 @@ from sglang.srt.batch_invariant_ops import (
 )
 from sglang.srt.environ import envs
 from sglang.srt.layers.utils import MultiPlatformOp
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cpu_has_amx_support,
@@ -38,7 +39,6 @@ from sglang.srt.utils import (
     is_npu,
     is_xpu,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_cuda = is_cuda()
 _is_flashinfer_available = is_flashinfer_available()

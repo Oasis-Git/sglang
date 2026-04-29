@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 import torch
 import tqdm
 
+from sglang.srt.compilation.compilation_config import CompilationConfig
 from sglang.srt.compilation.compile import install_torch_compiled
 from sglang.srt.compilation.compile_phase import (
     enable_torch_compile_warmup,
     set_pcg_capture_stream,
 )
-from sglang.srt.compilation.compilation_config import CompilationConfig
 from sglang.srt.distributed import get_tensor_model_parallel_rank
 from sglang.srt.distributed.device_communicators.pynccl_allocator import (
     set_graph_pool_id,
@@ -48,7 +48,9 @@ if TYPE_CHECKING:
 _VALID_COMPILERS = ("eager", "inductor")
 
 
-def _toggle_multi_platform_ops(model: torch.nn.Module, *, reverse: bool, num_tokens: int) -> None:
+def _toggle_multi_platform_ops(
+    model: torch.nn.Module, *, reverse: bool, num_tokens: int
+) -> None:
     """Recursively flip MultiPlatformOp submodules into / out of torch.compile mode.
 
     Mirrors the legacy ``_to_torch`` walk; lighter than the full
@@ -91,9 +93,9 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         the config, and registers the MoE A2A split-op when DeepEP /
         Mooncake is in use.
         """
-        assert server_args.piecewise_cuda_graph_tokens is not None, (
-            "piecewise_cuda_graph_tokens is not set"
-        )
+        assert (
+            server_args.piecewise_cuda_graph_tokens is not None
+        ), "piecewise_cuda_graph_tokens is not set"
         assert server_args.piecewise_cuda_graph_compiler in _VALID_COMPILERS, (
             f"By now, only {_VALID_COMPILERS} are supported for piecewise "
             "cuda graph compiler."

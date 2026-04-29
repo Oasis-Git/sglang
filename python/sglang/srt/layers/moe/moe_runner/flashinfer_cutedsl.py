@@ -11,8 +11,8 @@ from sglang.srt.layers.moe.moe_runner.base import (
     MoeRunnerConfig,
     register_fused_func,
 )
-from sglang.srt.utils.common import log_info_on_rank0, print_warning_once
 from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.utils.common import log_info_on_rank0, print_warning_once
 
 if TYPE_CHECKING:
     from sglang.srt.layers.moe.token_dispatcher import (

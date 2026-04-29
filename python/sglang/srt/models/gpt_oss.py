@@ -26,10 +26,6 @@ import torch
 from torch import nn
 from transformers import PretrainedConfig
 
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
-    get_forward_context,
-    is_in_tcpiecewise_cuda_graph,
-)
 from sglang.srt.distributed import (
     get_moe_expert_parallel_rank,
     get_moe_expert_parallel_world_size,
@@ -68,6 +64,10 @@ from sglang.srt.layers.utils import PPMissingLayer, get_layer_id
 from sglang.srt.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
+)
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+    get_forward_context,
+    is_in_tcpiecewise_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_loader.weight_utils import default_weight_loader

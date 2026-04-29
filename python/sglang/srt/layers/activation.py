@@ -30,6 +30,7 @@ from sglang.srt.distributed import (
 from sglang.srt.environ import envs
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.utils import MultiPlatformOp
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cpu_has_amx_support,
@@ -42,7 +43,6 @@ from sglang.srt.utils import (
     set_weight_attrs,
 )
 from sglang.utils import resolve_obj_by_qualname
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_cuda = is_cuda()
 _is_musa = is_musa()

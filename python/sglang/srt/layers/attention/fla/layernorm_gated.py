@@ -14,6 +14,7 @@ import triton
 import triton.language as tl
 from einops import rearrange
 
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cdiv,
@@ -23,7 +24,6 @@ from sglang.srt.utils import (
     is_npu,
     next_power_of_2,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_npu = is_npu()
 _use_cpu = is_cpu() and cpu_has_amx_support()

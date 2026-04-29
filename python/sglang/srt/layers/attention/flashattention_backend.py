@@ -210,7 +210,8 @@ class FlashAttentionBackend(AttentionBackend):
             if model_runner.server_args.enable_deterministic_inference
             or (
                 self.fa_impl_ver == 4
-                and model_runner.server_args.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED
+                and model_runner.server_args.cuda_graph_mode[Phase.DECODE]
+                != Backend.DISABLED
             )
             else 0
         )
