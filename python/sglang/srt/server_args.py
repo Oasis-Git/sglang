@@ -34,12 +34,13 @@ from sglang.srt.function_call.function_call_parser import FunctionCallParser
 from sglang.srt.layers.attention.fla.chunk_delta_h import CHUNK_SIZE as FLA_CHUNK_SIZE
 from sglang.srt.lora.lora_registry import LoRARef
 from sglang.srt.model_executor.cuda_graph_mode import (
+    ALL_BACKENDS,
     ALL_PHASES,
     ALLOWED_BACKENDS_PER_PHASE,
     BACKEND_BREAKABLE,
     BACKEND_DISABLED,
     BACKEND_FULL,
-    BACKEND_TCPCG,
+    BACKEND_TCPIECEWISE,
     DEFAULT_CUDA_GRAPH_MODE,
     PHASE_DECODE,
     PHASE_PREFILL,
@@ -1197,20 +1198,20 @@ class ServerArgs:
 
     def _apply_cuda_graph_compatibility(self):
         """Auto-disable prefill cuda graph for incompatible configs.
-        Rules are split per backend — TCPCG and BCG have different
+        Rules are split per backend — TCPiecewise and BCG have different
         constraints. ``--enforce-piecewise-cuda-graph`` bypasses
         everything.
         """
         if self.enforce_piecewise_cuda_graph:
             return
-        if self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_TCPCG:
-            self._disable_tcpcg_if_incompatible()
+        if self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_TCPIECEWISE:
+            self._disable_tcpiecewise_if_incompatible()
         elif self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_BREAKABLE:
             self._disable_bcg_if_incompatible()
 
-    def _disable_tcpcg_if_incompatible(self):
-        """TCPCG (torch.compile + piecewise) is incompatible with these
-        configurations. Most are torch.compile / dynamo limitations.
+    def _disable_tcpiecewise_if_incompatible(self):
+        """TCPiecewise (torch.compile + piecewise) is incompatible with
+        these configurations. Most are torch.compile / dynamo limitations.
         """
         from sglang.srt.platforms import current_platform
 
@@ -5939,18 +5940,14 @@ class ServerArgs:
             default=ServerArgs.cuda_graph_mode,
             help='Per-phase CUDA graph mode as JSON, e.g. '
             '\'{"decode":"full","prefill":"breakable"}\'. '
-            "Allowed per phase: full, breakable, tcpcg, disabled. "
+            "Allowed per phase: full, breakable, tcpiecewise, disabled. "
             "JSON wins over the per-phase --{prefill,decode}-* flags.",
         )
 
-        # Per-phase convenience flags. Each maps to a single phase of the
-        # canonical ``cuda_graph_mode`` dict. ``cuda-graph-mode`` JSON wins
-        # on conflict; a warning is emitted naming both.
-        _BACKEND_CHOICES = ("full", "breakable", "tcpcg", "disabled")
         parser.add_argument(
             "--prefill-cuda-graph-backend",
             type=str,
-            choices=_BACKEND_CHOICES,
+            choices=ALL_BACKENDS,
             default=None,
             help="Backend for the prefill (extend) phase. Equivalent to "
             "``--cuda-graph-mode '{\"prefill\":\"...\"}'`` (no decode change).",
@@ -5958,7 +5955,7 @@ class ServerArgs:
         parser.add_argument(
             "--decode-cuda-graph-backend",
             type=str,
-            choices=_BACKEND_CHOICES,
+            choices=ALL_BACKENDS,
             default=None,
             help="Backend for the decode phase. Equivalent to "
             "``--cuda-graph-mode '{\"decode\":\"...\"}'`` (no prefill change).",

@@ -1,4 +1,4 @@
-"""torch.compile-internal phase markers used by the tcpcg backend.
+"""torch.compile-internal phase markers used by the tcpiecewise backend.
 
 Two pieces of state, both private to the torch.compile path (the
 ``cuda_piecewise_backend`` FX backend and the runner that drives it):
@@ -25,7 +25,7 @@ _pcg_capture_stream: "torch.cuda.Stream | None" = None
 
 
 def is_in_torch_compile_warmup() -> bool:
-    """True while inside the tcpcg warmup-compile pass. Strict subset of
+    """True while inside the tcpiecewise warmup-compile pass. Strict subset of
     ``torch.compiler.is_compiling()``.
     """
     return _in_torch_compile_warmup
@@ -33,7 +33,7 @@ def is_in_torch_compile_warmup() -> bool:
 
 @contextmanager
 def enable_torch_compile_warmup():
-    """Mark the enclosed scope as the tcpcg warmup-compile pass. The FX
+    """Mark the enclosed scope as the tcpiecewise warmup-compile pass. The FX
     piecewise backend uses this to skip CUDA graph capture during warmup.
     """
     global _in_torch_compile_warmup

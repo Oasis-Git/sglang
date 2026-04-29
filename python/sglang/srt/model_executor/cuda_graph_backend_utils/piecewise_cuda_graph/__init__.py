@@ -1,4 +1,4 @@
-"""Piecewise CUDA graph utilities — shared between BCG and tcpcg backends.
+"""Piecewise CUDA graph utilities — shared between BCG and tcpiecewise backends.
 
 Public API:
   - ``is_in_piecewise_cuda_graph()`` — true while inside any piecewise capture.

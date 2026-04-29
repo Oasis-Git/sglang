@@ -19,7 +19,7 @@ Backend selection comes from ``cuda_graph_mode["decode"]``:
                       ``torch.cuda.CUDAGraph`` per shape.
   - ``"breakable"`` — experimental, ``BreakableCudaGraphBackend``:
                       segmented capture (no torch.compile).
-  - ``"tcpcg"``     — not implemented for decode; logs a one-shot warning
+  - ``"tcpiecewise"``     — not implemented for decode; logs a one-shot warning
                       and falls back to ``"full"``.
 """
 
@@ -820,7 +820,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         # Backend dispatches by shape — ``static_forward_batch`` is the
         # forward_batch the model code reads from during replay; for
         # Full/Breakable backends it's unused (replay against static
-        # buffers in place); for tcpcg-decode (not yet implemented) it
+        # buffers in place); for tcpiecewise-decode (not yet implemented) it
         # would feed args to the compiled callable.
         with self.backend.runtime_session():
             output = self.backend.replay(graph_key, forward_batch)

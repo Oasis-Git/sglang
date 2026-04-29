@@ -14,7 +14,7 @@
 """PrefillCudaGraphRunner — runs the EXTEND phase under a pluggable backend.
 
 Backend selection comes from ``cuda_graph_mode["prefill"]``:
-  - ``"tcpcg"``     — default, ``TCPiecewiseCudaGraphBackend``: torch.compile
+  - ``"tcpiecewise"``     — default, ``TCPiecewiseCudaGraphBackend``: torch.compile
                       wraps the model; per-shape graphs live in
                       torch.compile's internal cache. Multi-batch supported.
   - ``"breakable"`` — ``BreakableCudaGraphBackend``: segmented capture (no
@@ -286,7 +286,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
             return False
         if forward_batch.replace_embeds is not None:
             return False
-        # tcpcg captures with ForwardMode.EXTEND and spec_info=None.
+        # tcpiecewise captures with ForwardMode.EXTEND and spec_info=None.
         if forward_batch.forward_mode.is_target_verify():
             return False
         if forward_batch.capture_hidden_mode != self.capture_hidden_mode:

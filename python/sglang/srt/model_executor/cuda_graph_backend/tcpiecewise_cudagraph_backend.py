@@ -52,7 +52,7 @@ def _toggle_multi_platform_ops(model: torch.nn.Module, *, reverse: bool, num_tok
     """Recursively flip MultiPlatformOp submodules into / out of torch.compile mode.
 
     Mirrors the legacy ``_to_torch`` walk; lighter than the full
-    ``patch_model`` because tcpcg uses ``install_torch_compiled`` for
+    ``patch_model`` because tcpiecewise uses ``install_torch_compiled`` for
     actual compilation rather than calling ``torch.compile`` directly.
     """
     for sub in model._modules.values():
@@ -142,18 +142,18 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         not done here — that lives in ``capture_one`` (matches Full /
         BCG: prepare = setup, capture_one = warmup + record).
 
-        Phase breakdown for tcpcg, paired with what Full / BCG do:
+        Phase breakdown for tcpiecewise, paired with what Full / BCG do:
 
           1. JIT-kernel-activate forward (1 call at smallest shape):
              warms shared CUDA kernels before torch.compile sees the
-             model. tcpcg-only.
+             model. tcpiecewise-only.
           2. install_compile: wraps ``language_model.model.forward``
-             with ``torch.compile``. tcpcg-only.
+             with ``torch.compile``. tcpiecewise-only.
           3. Compile-loop pass: 1 forward per shape inside
              ``enable_torch_compile_warmup`` — the FX backend short-
              circuits the cuda-graph branch (see
              ``cuda_piecewise_backend:143``) so this only triggers
-             FX/inductor compilation. tcpcg-only.
+             FX/inductor compilation. tcpiecewise-only.
           4. Per-shape warmup + record: handled by ``capture_one``;
              matches Full / BCG's 2x warmup + 1x capture pattern.
 

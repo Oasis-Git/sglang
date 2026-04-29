@@ -1,7 +1,7 @@
 """CUDA graph capture context manager + forward-context propagation.
 
 Owns two pieces of cross-cutting state used by *every* piecewise-style
-backend (currently breakable + tcpcg):
+backend (currently breakable + tcpiecewise):
 
 * ``_in_piecewise_cuda_graph`` — a process-global flag set true while we
   are inside the capture or replay window of a piecewise CUDA graph.
@@ -35,7 +35,7 @@ _in_piecewise_cuda_graph = False
 
 def is_in_piecewise_cuda_graph() -> bool:
     """True while inside the capture or replay window of any piecewise
-    CUDA graph backend (BCG or tcpcg today; full backend does not toggle
+    CUDA graph backend (BCG or tcpiecewise today; full backend does not toggle
     this flag and does not need it). See plan §6.5.
     """
     return _in_piecewise_cuda_graph

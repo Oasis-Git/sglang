@@ -26,6 +26,6 @@ from sglang.srt.model_executor.cuda_graph_backend.factory import (  # noqa: F401
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (  # noqa: F401
     FullCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend.tcpcg_cudagraph_backend import (  # noqa: F401
+from sglang.srt.model_executor.cuda_graph_backend.tcpiecewise_cudagraph_backend import (  # noqa: F401
     TCPiecewiseCudaGraphBackend,
 )

@@ -23,7 +23,7 @@ from sglang.srt.model_executor.cuda_graph_mode import (  # noqa: F401
     BACKEND_BREAKABLE,
     BACKEND_DISABLED,
     BACKEND_FULL,
-    BACKEND_TCPCG,
+    BACKEND_TCPIECEWISE,
     DEFAULT_CUDA_GRAPH_MODE,
     PHASE_DECODE,
     PHASE_PREFILL,
@@ -31,7 +31,7 @@ from sglang.srt.model_executor.cuda_graph_mode import (  # noqa: F401
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend.tcpcg_cudagraph_backend import (
+from sglang.srt.model_executor.cuda_graph_backend.tcpiecewise_cudagraph_backend import (
     TCPiecewiseCudaGraphBackend,
 )
 
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Track first occurrence of each fallback warning to avoid log spam.
-_TCPCG_DECODE_FALLBACK_LOGGED = False
+_TCPIECEWISE_DECODE_FALLBACK_LOGGED = False
 
 
 def resolve_decode_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
@@ -67,26 +67,26 @@ def resolve_decode_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
             enable_memory_saver=enable_memory_saver,
             debug_eager=model_runner.server_args.debug_cuda_graph,
         )
-    if backend_name == BACKEND_TCPCG:
-        global _TCPCG_DECODE_FALLBACK_LOGGED
-        if not _TCPCG_DECODE_FALLBACK_LOGGED:
+    if backend_name == BACKEND_TCPIECEWISE:
+        global _TCPIECEWISE_DECODE_FALLBACK_LOGGED
+        if not _TCPIECEWISE_DECODE_FALLBACK_LOGGED:
             logger.warning(
-                "cuda_graph_mode decode='tcpcg' is not yet implemented; "
+                "cuda_graph_mode decode='tcpiecewise' is not yet implemented; "
                 "falling back to 'full'."
             )
-            _TCPCG_DECODE_FALLBACK_LOGGED = True
+            _TCPIECEWISE_DECODE_FALLBACK_LOGGED = True
     return FullCudaGraphBackend(enable_memory_saver=enable_memory_saver)
 
 
 def resolve_prefill_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
     """Pick a backend instance from ``cuda_graph_mode['prefill']``."""
     mode = model_runner.server_args.cuda_graph_mode or {}
-    backend_name = mode.get(PHASE_PREFILL, BACKEND_TCPCG)
+    backend_name = mode.get(PHASE_PREFILL, BACKEND_TCPIECEWISE)
 
     if backend_name == BACKEND_BREAKABLE:
         return BreakableCudaGraphBackend(
             enable_memory_saver=model_runner.server_args.enable_memory_saver,
             debug_eager=model_runner.server_args.debug_cuda_graph,
         )
-    # Default: tcpcg. ``(prefill, full)`` is rejected at config validation.
+    # Default: tcpiecewise. ``(prefill, full)`` is rejected at config validation.
     return TCPiecewiseCudaGraphBackend()
