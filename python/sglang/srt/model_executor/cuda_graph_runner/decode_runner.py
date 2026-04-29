@@ -61,8 +61,8 @@ from sglang.srt.model_executor.cuda_graph_backend.factory import resolve_decode_
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
+from sglang.srt.model_executor.cuda_graph_backend_utils import (
+    CUDA_GRAPH_CAPTURE_FAILED_MSG,
 )
 from sglang.srt.model_executor.cuda_graph_runner.base_runner import (
     BaseCudaGraphRunner,
@@ -273,7 +273,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         except RuntimeError as e:
             raise Exception(
                 f"Capture cuda graph failed: {e}\n"
-                f"{PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG}"
+                f"{CUDA_GRAPH_CAPTURE_FAILED_MSG}"
             )
 
     # -----------------------------------------------------------------

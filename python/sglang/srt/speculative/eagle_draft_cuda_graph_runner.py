@@ -12,9 +12,11 @@ from sglang.srt.layers.dp_attention import (
     set_is_extend_in_batch,
 )
 from sglang.srt.model_executor.cuda_graph_backend import FullCudaGraphBackend
+from sglang.srt.model_executor.cuda_graph_backend_utils import (
+    CUDA_GRAPH_CAPTURE_FAILED_MSG,
+)
 from sglang.srt.model_executor.cuda_graph_runner import (
     DecodeCudaGraphRunner,
-    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
     DeepEPCudaGraphRunnerAdapter,
     get_batch_sizes_to_capture,
     model_capture_mode,
@@ -213,7 +215,7 @@ class EAGLEDraftCudaGraphRunner(DecodeCudaGraphRunner):
                 self.capture()
         except RuntimeError as e:
             raise Exception(
-                f"Capture cuda graph failed: {e}\n{PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG}"
+                f"Capture cuda graph failed: {e}\n{CUDA_GRAPH_CAPTURE_FAILED_MSG}"
             )
 
     # -----------------------------------------------------------------
