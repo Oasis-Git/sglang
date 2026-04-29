@@ -17,17 +17,7 @@ from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import 
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
     BreakableCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_mode import (  # noqa: F401
-    ALL_PHASES,
-    ALLOWED_BACKENDS_PER_PHASE,
-    BACKEND_BREAKABLE,
-    BACKEND_DISABLED,
-    BACKEND_FULL,
-    BACKEND_TCPIECEWISE,
-    DEFAULT_CUDA_GRAPH_MODE,
-    PHASE_DECODE,
-    PHASE_PREFILL,
-)
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
@@ -51,7 +41,7 @@ def resolve_decode_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
     the Full-style backend is wired for NPU today).
     """
     mode = model_runner.server_args.cuda_graph_mode or {}
-    backend_name = mode.get(PHASE_DECODE, BACKEND_FULL)
+    backend_name = mode.get(Phase.DECODE, Backend.FULL)
 
     enable_memory_saver = model_runner.server_args.enable_memory_saver
 
@@ -62,12 +52,12 @@ def resolve_decode_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
 
         return NPUCudaGraphBackend(enable_memory_saver=enable_memory_saver)
 
-    if backend_name == BACKEND_BREAKABLE:
+    if backend_name == Backend.BREAKABLE:
         return BreakableCudaGraphBackend(
             enable_memory_saver=enable_memory_saver,
             debug_eager=model_runner.server_args.debug_cuda_graph,
         )
-    if backend_name == BACKEND_TCPIECEWISE:
+    if backend_name == Backend.TCPIECEWISE:
         global _TCPIECEWISE_DECODE_FALLBACK_LOGGED
         if not _TCPIECEWISE_DECODE_FALLBACK_LOGGED:
             logger.warning(
@@ -81,9 +71,9 @@ def resolve_decode_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
 def resolve_prefill_backend(model_runner: "ModelRunner") -> BaseCudaGraphBackend:
     """Pick a backend instance from ``cuda_graph_mode['prefill']``."""
     mode = model_runner.server_args.cuda_graph_mode or {}
-    backend_name = mode.get(PHASE_PREFILL, BACKEND_TCPIECEWISE)
+    backend_name = mode.get(Phase.PREFILL, Backend.TCPIECEWISE)
 
-    if backend_name == BACKEND_BREAKABLE:
+    if backend_name == Backend.BREAKABLE:
         return BreakableCudaGraphBackend(
             enable_memory_saver=model_runner.server_args.enable_memory_saver,
             debug_eager=model_runner.server_args.debug_cuda_graph,

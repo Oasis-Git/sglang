@@ -34,16 +34,10 @@ from sglang.srt.function_call.function_call_parser import FunctionCallParser
 from sglang.srt.layers.attention.fla.chunk_delta_h import CHUNK_SIZE as FLA_CHUNK_SIZE
 from sglang.srt.lora.lora_registry import LoRARef
 from sglang.srt.model_executor.cuda_graph_mode import (
-    ALL_BACKENDS,
-    ALL_PHASES,
     ALLOWED_BACKENDS_PER_PHASE,
-    BACKEND_BREAKABLE,
-    BACKEND_DISABLED,
-    BACKEND_FULL,
-    BACKEND_TCPIECEWISE,
     DEFAULT_CUDA_GRAPH_MODE,
-    PHASE_DECODE,
-    PHASE_PREFILL,
+    Backend,
+    Phase,
     parse_cuda_graph_mode_arg,
 )
 from sglang.srt.parser.reasoning_parser import ReasoningParser
@@ -1204,9 +1198,9 @@ class ServerArgs:
         """
         if self.enforce_piecewise_cuda_graph:
             return
-        if self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_TCPIECEWISE:
+        if self.cuda_graph_mode[Phase.PREFILL] == Backend.TCPIECEWISE:
             self._disable_tcpiecewise_if_incompatible()
-        elif self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_BREAKABLE:
+        elif self.cuda_graph_mode[Phase.PREFILL] == Backend.BREAKABLE:
             self._disable_breakable_if_incompatible()
 
     def _disable_tcpiecewise_if_incompatible(self):
@@ -1262,7 +1256,7 @@ class ServerArgs:
         ]
         for _name, predicate in rules:
             if predicate():
-                self.cuda_graph_mode[PHASE_PREFILL] = BACKEND_DISABLED
+                self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
 
     def _disable_breakable_if_incompatible(self):
         """Breakable (segmented capture, no torch.compile). Breakable enforces HIP
@@ -1276,7 +1270,7 @@ class ServerArgs:
         for phase, backend in mode.items():
             msg = None
             if phase not in ALLOWED_BACKENDS_PER_PHASE:
-                msg = f"unknown phase {phase!r}; allowed: {ALL_PHASES}"
+                msg = f"unknown phase {phase!r}; allowed: {Phase.ALL}"
             elif backend not in ALLOWED_BACKENDS_PER_PHASE[phase]:
                 allowed = ALLOWED_BACKENDS_PER_PHASE[phase]
                 msg = f"{phase}={backend!r} not allowed; allowed: {allowed}"
@@ -5947,7 +5941,7 @@ class ServerArgs:
         parser.add_argument(
             "--prefill-cuda-graph-backend",
             type=str,
-            choices=ALL_BACKENDS,
+            choices=Backend.ALL,
             default=None,
             help="Backend for the prefill (extend) phase. Equivalent to "
             "``--cuda-graph-mode '{\"prefill\":\"...\"}'`` (no decode change).",
@@ -5955,7 +5949,7 @@ class ServerArgs:
         parser.add_argument(
             "--decode-cuda-graph-backend",
             type=str,
-            choices=ALL_BACKENDS,
+            choices=Backend.ALL,
             default=None,
             help="Backend for the decode phase. Equivalent to "
             "``--cuda-graph-mode '{\"decode\":\"...\"}'`` (no prefill change).",
@@ -6626,35 +6620,35 @@ class ServerArgs:
         """
         explicit: Dict[str, str] = dict(getattr(args, "cuda_graph_mode", None) or {})
         for phase in explicit:
-            if phase not in ALL_PHASES:
+            if phase not in Phase.ALL:
                 raise ValueError(
                     f"--cuda-graph-mode has unknown phase {phase!r}; "
-                    f"allowed: {ALL_PHASES}"
+                    f"allowed: {Phase.ALL}"
                 )
 
         # Legacy global flags. Lowest precedence.
         legacy_view: Dict[str, str] = {}
         if getattr(args, "disable_cuda_graph", False):
-            legacy_view[PHASE_DECODE] = BACKEND_DISABLED
-            legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
+            legacy_view[Phase.DECODE] = Backend.DISABLED
+            legacy_view[Phase.PREFILL] = Backend.DISABLED
         if getattr(args, "disable_piecewise_cuda_graph", False):
-            legacy_view[PHASE_PREFILL] = BACKEND_DISABLED
+            legacy_view[Phase.PREFILL] = Backend.DISABLED
         elif getattr(args, "enable_breakable_cuda_graph", False):
-            legacy_view[PHASE_PREFILL] = BACKEND_BREAKABLE
+            legacy_view[Phase.PREFILL] = Backend.BREAKABLE
 
         # Per-phase convenience flags. Sugar for one phase.
         convenience_view: Dict[str, str] = {}
         if getattr(args, "prefill_disable_cuda_graph", False):
-            convenience_view[PHASE_PREFILL] = BACKEND_DISABLED
+            convenience_view[Phase.PREFILL] = Backend.DISABLED
         if getattr(args, "decode_disable_cuda_graph", False):
-            convenience_view[PHASE_DECODE] = BACKEND_DISABLED
+            convenience_view[Phase.DECODE] = Backend.DISABLED
         if getattr(args, "prefill_cuda_graph_backend", None) is not None:
-            convenience_view[PHASE_PREFILL] = args.prefill_cuda_graph_backend
+            convenience_view[Phase.PREFILL] = args.prefill_cuda_graph_backend
         if getattr(args, "decode_cuda_graph_backend", None) is not None:
-            convenience_view[PHASE_DECODE] = args.decode_cuda_graph_backend
+            convenience_view[Phase.DECODE] = args.decode_cuda_graph_backend
 
         resolved: Dict[str, str] = dict(DEFAULT_CUDA_GRAPH_MODE)
-        for phase in ALL_PHASES:
+        for phase in Phase.ALL:
             if phase in explicit:
                 resolved[phase] = explicit[phase]
                 for src_name, src in (
