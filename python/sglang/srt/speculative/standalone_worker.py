@@ -13,6 +13,7 @@ from sglang.srt.speculative.eagle_worker import EAGLEWorker
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 from sglang.srt.speculative.spec_utils import draft_tp_context, load_token_map
 from sglang.srt.utils import empty_context, get_bool_env_var, is_cuda
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if is_cuda():
     from sgl_kernel import segment_packbits  # noqa: F401
@@ -53,8 +54,8 @@ class StandaloneWorker(EAGLEWorker):
 
         # Do not capture cuda graph in `super().__init__()`
         # It will be captured later.
-        backup_decode_mode = server_args.cuda_graph_mode["decode"]
-        server_args.cuda_graph_mode["decode"] = "disabled"
+        backup_decode_mode = server_args.cuda_graph_mode[Phase.DECODE]
+        server_args.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
         self.req_to_token_pool, self.token_to_kv_pool_allocator = (
@@ -90,7 +91,7 @@ class StandaloneWorker(EAGLEWorker):
             )
 
         # Init attention backend and cuda graphs
-        self.draft_model_runner.server_args.cuda_graph_mode["decode"] = (
+        self.draft_model_runner.server_args.cuda_graph_mode[Phase.DECODE] = (
             backup_decode_mode
         )
         self.draft_tp_context = (

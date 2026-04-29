@@ -50,6 +50,7 @@ from sglang.srt.speculative.spec_utils import (
     select_top_k_tokens,
 )
 from sglang.srt.utils.common import empty_context, fast_topk
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner, ModelRunnerOutput
@@ -109,8 +110,8 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
 
         # Do not capture cuda graph in `TpModelWorker` init,
         # will capture later with init_cuda_graphs()
-        backup_decode_mode = server_args.cuda_graph_mode["decode"]
-        server_args.cuda_graph_mode["decode"] = "disabled"
+        backup_decode_mode = server_args.cuda_graph_mode[Phase.DECODE]
+        server_args.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
 
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
@@ -159,7 +160,7 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
 
         # Init attention backend and cuda graphs
         for i in range(self.speculative_num_steps):
-            self.draft_runner_list[i].server_args.cuda_graph_mode["decode"] = (
+            self.draft_runner_list[i].server_args.cuda_graph_mode[Phase.DECODE] = (
                 backup_decode_mode
             )
         self.draft_tp_context = (
@@ -206,7 +207,7 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.cuda_graph_mode["decode"] == "disabled":
+        if self.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED:
             return
 
         self.cuda_graph_runner_for_draft_extend = (

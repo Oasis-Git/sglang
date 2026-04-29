@@ -13,7 +13,7 @@
 # ==============================================================================
 """PrefillCudaGraphRunner — runs the EXTEND phase under a pluggable backend.
 
-Backend selection comes from ``cuda_graph_mode["prefill"]``:
+Backend selection comes from ``cuda_graph_mode[Phase.PREFILL]``:
   - ``"tcpiecewise"``     — default, ``TCPiecewiseCudaGraphBackend``: torch.compile
                       wraps the model; per-shape graphs live in
                       torch.compile's internal cache. Multi-batch supported.
@@ -63,6 +63,7 @@ from sglang.srt.model_executor.forward_batch_info import (
     PPProxyTensors,
 )
 from sglang.srt.utils import get_available_gpu_memory, is_npu, log_info_on_rank0
+from sglang.srt.model_executor.cuda_graph_mode import Phase
 
 # Suppress Dynamo warning about tracing through lru_cache-wrapped functions.
 warnings.filterwarnings("ignore", message=".*lru_cache.*", module="torch._dynamo")

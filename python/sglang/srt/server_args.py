@@ -1181,12 +1181,12 @@ class ServerArgs:
 
     def _handle_xpu_backends(self):
         if self.device == "xpu":
-            if self.cuda_graph_mode["prefill"] != "disabled":
+            if self.cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
                 logger.warning(
                     "XPU platform does not support piecewise CUDA graph, "
                     "disabling prefill cuda graph."
                 )
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
 
     # ------------------------------------------------------------------
     # CUDA graph configuration resolution
@@ -1328,10 +1328,10 @@ class ServerArgs:
         if not self.enable_mis:
             return
 
-        if self.cuda_graph_mode["decode"] != "disabled":
+        if self.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
             logger.warning("CUDA graph is disabled because --enable-mis is set.")
-        self.cuda_graph_mode["decode"] = "disabled"
-        self.cuda_graph_mode["prefill"] = "disabled"
+        self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+        self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
 
         if not self.disable_radix_cache:
             logger.warning("Radix cache is disabled because --enable-mis is set.")
@@ -1512,7 +1512,7 @@ class ServerArgs:
                     reserved_mem += self.cuda_graph_max_bs * self.dp_size * 1.5
 
             # For piecewise cuda graphs
-            if self.cuda_graph_mode["prefill"] != "disabled":
+            if self.cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
                 if not self.use_mla_backend():
                     # Only calculate the memory overhead for Non-Torch Memory use since the Torch Memory can be reused with Cuda Graph Capture
                     reserved_mem += len(self.piecewise_cuda_graph_tokens) * 8
@@ -1816,7 +1816,7 @@ class ServerArgs:
 
             else:
                 # DeepSeek V3/R1/V3.1
-                if self.cuda_graph_mode["prefill"] != "disabled":
+                if self.cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
                     logger.info("Piecewise CUDA graph is enabled, use MLA for prefill.")
 
                 if is_sm100_supported():
@@ -2569,15 +2569,15 @@ class ServerArgs:
             logger.warning(
                 "Cuda graph is disabled because of using torch native attention backend"
             )
-            self.cuda_graph_mode["decode"] = "disabled"
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
 
         if self.attention_backend == "flex_attention":
             logger.warning(
                 "Cuda graph is disabled because of using torch Flex Attention backend"
             )
-            self.cuda_graph_mode["decode"] = "disabled"
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             assert (
                 self.speculative_algorithm is None
             ), "Speculative decoding is currently not supported with Flex Attention backend"
@@ -3048,7 +3048,7 @@ class ServerArgs:
             and self.get_model_config().hf_config.architectures[0]
             != "GptOssForCausalLM"
         ):
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             logger.info(
                 f"Piecewise cuda graph is disabled for MoE runner backend "
                 f"'{self.moe_runner_backend}' (bypassed topk is incompatible "
@@ -3059,7 +3059,7 @@ class ServerArgs:
         if self.moe_a2a_backend == "deepep":
             if self.deepep_mode == "normal":
                 logger.warning("Cuda graph is disabled because deepep_mode=`normal`")
-                self.cuda_graph_mode["decode"] = "disabled"
+                self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
             self.ep_size = self.tp_size
             logger.warning(
                 f"DeepEP MoE is enabled. The expert parallel size is adjusted to be the same as the tensor parallel size[{self.tp_size}]."
@@ -3734,8 +3734,8 @@ class ServerArgs:
                 self.disaggregation_transfer_backend != "fake"
             ), "Prefill server does not support 'fake' as the transfer backend"
 
-            if self.cuda_graph_mode["prefill"] == "disabled":
-                self.cuda_graph_mode["decode"] = "disabled"
+            if self.cuda_graph_mode[Phase.PREFILL] == Backend.DISABLED:
+                self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
                 logger.warning(
                     "Cuda graph is disabled for prefill server when piecewise cuda graph is not enabled."
                 )
@@ -4023,11 +4023,11 @@ class ServerArgs:
             return
         # On AMD/HIP, disable cuda graph for DLLM and use triton backend
         if is_hip():
-            if self.cuda_graph_mode["decode"] != "disabled":
+            if self.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
                 logger.warning(
                     "Cuda graph is disabled for diffusion LLM inference on AMD GPUs"
                 )
-                self.cuda_graph_mode["decode"] = "disabled"
+                self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
             if self.attention_backend not in ["triton", "aiter"]:
                 logger.warning(
                     "Attention backend is set to triton for diffusion LLM inference on AMD GPUs"
@@ -4039,7 +4039,7 @@ class ServerArgs:
                     "Attention backend is overridden to 'ascend' when running on NPU for diffusion LLM inference."
                 )
                 self.attention_backend = "ascend"
-        elif self.cuda_graph_mode["decode"] != "disabled":
+        elif self.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
             if self.attention_backend != "flashinfer":
                 logger.warning(
                     "Attention backend is set to flashinfer because of enabling cuda graph in diffusion LLM inference"
@@ -4101,8 +4101,8 @@ class ServerArgs:
             logger.warning(
                 "Cuda graph and server warmup are disabled because of using tensor dump mode"
             )
-            self.cuda_graph_mode["decode"] = "disabled"
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             self.skip_server_warmup = True
 
         if self.msprobe_dump_config is not None:
@@ -4111,8 +4111,8 @@ class ServerArgs:
                 "cuda graph is disabled because msProbe only supports dump in eager mode, "
                 "warmup is disabled(skip_server_warmup=True) because there is no need to dump data for this stage."
             )
-            self.cuda_graph_mode["decode"] = "disabled"
-            self.cuda_graph_mode["prefill"] = "disabled"
+            self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+            self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             self.skip_server_warmup = True
 
         # Validate limit_mm_per_prompt modalities

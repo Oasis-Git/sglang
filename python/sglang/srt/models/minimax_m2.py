@@ -97,6 +97,7 @@ from sglang.srt.utils import (
 )
 from sglang.srt.utils.custom_op import register_custom_op
 from sglang.srt.utils.hf_transformers_utils import get_rope_config
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 logger = logging.getLogger(__name__)
 _is_cuda = is_cuda()
@@ -601,7 +602,7 @@ class MiniMaxM2MoE(nn.Module):
         if router_logits is not None:
             ctx = (
                 nullcontext()
-                if get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
+                if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED
                 else get_global_expert_distribution_recorder().with_current_layer(
                     self.layer_id
                 )
@@ -639,7 +640,7 @@ class MiniMaxM2MoE(nn.Module):
         if self.ep_size > 1:
             ctx = (
                 nullcontext()
-                if get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
+                if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED
                 else get_global_expert_distribution_recorder().with_current_layer(
                     self.layer_id
                 )
@@ -1095,7 +1096,7 @@ class MiniMaxM2Model(nn.Module):
             for i in range(self.start_layer, self.end_layer):
                 ctx = (
                     nullcontext()
-                    if get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
+                    if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED
                     else get_global_expert_distribution_recorder().with_current_layer(i)
                 )
                 with ctx:

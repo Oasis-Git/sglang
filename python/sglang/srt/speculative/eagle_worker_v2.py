@@ -67,6 +67,7 @@ from sglang.srt.utils.common import (
     next_power_of_2,
 )
 from sglang.srt.utils.patch_torch import monkey_patch_torch_reductions
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_npu = is_npu()
 _is_cuda = is_cuda()
@@ -121,8 +122,8 @@ class EagleDraftWorker(BaseDraftWorker):
 
         # Do not capture cuda graph in `TpModelWorker` init,
         # will capture later with init_cuda_graphs()
-        backup_decode_mode = server_args.cuda_graph_mode["decode"]
-        server_args.cuda_graph_mode["decode"] = "disabled"
+        backup_decode_mode = server_args.cuda_graph_mode[Phase.DECODE]
+        server_args.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
 
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
@@ -169,7 +170,7 @@ class EagleDraftWorker(BaseDraftWorker):
         self.init_lm_head()
 
         # Init attention backend and cuda graphs
-        self.draft_runner.server_args.cuda_graph_mode["decode"] = backup_decode_mode
+        self.draft_runner.server_args.cuda_graph_mode[Phase.DECODE] = backup_decode_mode
         self.draft_tp_context = (
             draft_tp_context if server_args.enable_dp_attention else empty_context
         )
@@ -256,7 +257,7 @@ class EagleDraftWorker(BaseDraftWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.cuda_graph_mode["decode"] == "disabled":
+        if self.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED:
             return
 
         if self.server_args.model_impl == "mindspore":

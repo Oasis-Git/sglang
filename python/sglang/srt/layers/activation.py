@@ -42,6 +42,7 @@ from sglang.srt.utils import (
     set_weight_attrs,
 )
 from sglang.utils import resolve_obj_by_qualname
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_cuda = is_cuda()
 _is_musa = is_musa()
@@ -106,7 +107,7 @@ class SiluAndMul(MultiPlatformOp):
         return out
 
     def forward_musa(self, x: torch.Tensor) -> torch.Tensor:
-        if get_global_server_args().cuda_graph_mode["prefill"] != "disabled":
+        if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
             return self.forward_native(x)
 
         if not hasattr(self, "_musa_swish_glu"):

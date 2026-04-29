@@ -76,6 +76,7 @@ from sglang.srt.utils import (
     is_sm90_supported,
     is_sm100_supported,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_cuda = is_cuda()
 _is_flashinfer_available = is_flashinfer_available()
@@ -267,7 +268,7 @@ class AttnTpContext:
             and not is_dp_attention_enabled()
             and get_moe_a2a_backend().is_none()
             and not enable_moe_dense_fully_dp()
-            and get_global_server_args().cuda_graph_mode["prefill"] == "disabled"
+            and get_global_server_args().cuda_graph_mode[Phase.PREFILL] == Backend.DISABLED
             and get_global_server_args().speculative_algorithm != "EAGLE3"
         )
         if get_global_server_args().enable_attn_tp_input_scattered:

@@ -23,6 +23,7 @@ from sglang.srt.utils import (
     is_npu,
     next_power_of_2,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_npu = is_npu()
 _use_cpu = is_cpu() and cpu_has_amx_support()
@@ -180,7 +181,7 @@ def calc_rows_per_block(M: int, device: torch.device) -> int:
     # When piecewise cuda graph is enabled, use a constant value to avoid
     # torch.compile creating guards on the dynamic batch dimension.
     try:
-        if get_global_server_args().cuda_graph_mode["prefill"] != "disabled":
+        if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
             return MAX_ROWS_PER_BLOCK
     except ValueError:
         # Global server args not initialized (e.g., in unit tests)

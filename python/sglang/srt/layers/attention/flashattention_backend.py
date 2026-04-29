@@ -31,6 +31,7 @@ from sglang.jit_kernel.flash_attention import (
     flash_attn_varlen_func,
     flash_attn_with_kvcache,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 
 @dataclass
@@ -209,7 +210,7 @@ class FlashAttentionBackend(AttentionBackend):
             if model_runner.server_args.enable_deterministic_inference
             or (
                 self.fa_impl_ver == 4
-                and model_runner.server_args.cuda_graph_mode["decode"] != "disabled"
+                and model_runner.server_args.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED
             )
             else 0
         )

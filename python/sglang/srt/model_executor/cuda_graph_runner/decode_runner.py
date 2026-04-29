@@ -14,7 +14,7 @@
 """DecodeCudaGraphRunner — runs DECODE / TARGET_VERIFY / DLLM_EXTEND under
 a pluggable backend.
 
-Backend selection comes from ``cuda_graph_mode["decode"]``:
+Backend selection comes from ``cuda_graph_mode[Phase.DECODE]``:
   - ``"full"``      — default, ``FullCudaGraphBackend``: one
                       ``torch.cuda.CUDAGraph`` per shape.
   - ``"breakable"`` — experimental, ``BreakableCudaGraphBackend``:
@@ -97,6 +97,7 @@ from sglang.srt.utils import (
     require_mlp_sync,
     require_mlp_tp_gather,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Phase
 
 try:
     from kt_kernel import KTMoEWrapper

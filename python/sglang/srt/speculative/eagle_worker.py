@@ -76,6 +76,7 @@ from sglang.srt.utils import (
     next_power_of_2,
 )
 from sglang.srt.utils.patch_torch import monkey_patch_torch_reductions
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 _is_npu = is_npu()
 _is_musa = is_musa()
@@ -125,8 +126,8 @@ class EAGLEWorker(TpModelWorker):
 
         # Do not capture cuda graph in `super().__init__()`
         # It will be captured later.
-        backup_decode_mode = server_args.cuda_graph_mode["decode"]
-        server_args.cuda_graph_mode["decode"] = "disabled"
+        backup_decode_mode = server_args.cuda_graph_mode[Phase.DECODE]
+        server_args.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
         # Share the allocator with a target worker.
         # Draft and target worker own their own KV cache pools.
         self.req_to_token_pool, self.token_to_kv_pool_allocator = (
@@ -201,7 +202,7 @@ class EAGLEWorker(TpModelWorker):
             self.draft_model_runner.model.set_embed_and_head(embed, head)
 
         # Init attention backend and cuda graphs
-        self.draft_model_runner.server_args.cuda_graph_mode["decode"] = (
+        self.draft_model_runner.server_args.cuda_graph_mode[Phase.DECODE] = (
             backup_decode_mode
         )
         self.draft_tp_context = (
@@ -266,7 +267,7 @@ class EAGLEWorker(TpModelWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.cuda_graph_mode["decode"] == "disabled":
+        if self.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED:
             return
 
         Device2DraftCudaGraphRunner = {
@@ -360,7 +361,7 @@ class EAGLEWorker(TpModelWorker):
                 target_model_runner.init_new_workspace = backup_init
 
             target_graph_runner = None
-            if self.server_args.cuda_graph_mode["decode"] != "disabled":
+            if self.server_args.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
                 target_graph_runner = DecodeCudaGraphRunner(
                     target_model_runner,
                     attn_backend=target_attn_backend,

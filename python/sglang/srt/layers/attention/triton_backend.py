@@ -21,6 +21,7 @@ from sglang.srt.utils import (
     get_int_env_var,
     next_power_of_2,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if TYPE_CHECKING:
     from sglang.srt.layers.radix_attention import RadixAttention
@@ -130,7 +131,7 @@ class TritonAttnBackend(AttentionBackend):
         self.max_kv_splits = model_runner.server_args.triton_attention_num_kv_splits
 
         self.allow_bidirectional_attention_in_extend = (
-            model_runner.server_args.cuda_graph_mode["decode"] == "disabled"
+            model_runner.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED
             and (model_runner.server_args.chunked_prefill_size == -1)
         )
 

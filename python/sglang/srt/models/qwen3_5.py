@@ -97,6 +97,7 @@ from sglang.srt.utils import (
     set_weight_attrs,
 )
 from sglang.srt.utils.hf_transformers_utils import get_processor, get_rope_config
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 logger = logging.getLogger(__name__)
 _is_cuda = is_cuda()
@@ -426,7 +427,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or get_global_server_args().cuda_graph_mode["prefill"] != "disabled"
+            or get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

@@ -35,6 +35,7 @@ from sglang.srt.utils import (
     is_sm100_supported,
     next_power_of_2,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if TYPE_CHECKING:
     from sglang.srt.layers.radix_attention import RadixAttention
@@ -244,7 +245,7 @@ class FlashInferAttnBackend(AttentionBackend):
         if is_sm100_supported():
             # Disable CUTLASS backend when piecewise cuda graph is enabled
             # due to TMA descriptor initialization issues on B200
-            if model_runner.server_args.cuda_graph_mode["prefill"] != "disabled":
+            if model_runner.server_args.cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
                 logger.warning(
                     "CUTLASS backend is disabled when piecewise cuda graph is enabled "
                     "due to TMA descriptor initialization issues on B200. "
