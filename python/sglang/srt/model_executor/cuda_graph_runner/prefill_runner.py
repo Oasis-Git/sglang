@@ -53,7 +53,9 @@ from sglang.srt.model_executor.cuda_graph_runner.base_runner import (
     BaseCudaGraphRunner,
     freeze_gc,
 )
-from sglang.srt.model_executor.cuda_graph_runner.buffers import PrefillInputBuffers
+from sglang.srt.model_executor.cuda_graph_runner_utils.buffers import (
+    PrefillInputBuffers,
+)
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
     ForwardBatch,

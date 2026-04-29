@@ -69,12 +69,14 @@ from sglang.srt.model_executor.cuda_graph_runner.base_runner import (
     freeze_gc,
     get_batch_sizes_to_capture,
 )
-from sglang.srt.model_executor.cuda_graph_runner.buffers import DecodeInputBuffers
-from sglang.srt.model_executor.cuda_graph_runner.capture_mode import (
+from sglang.srt.model_executor.cuda_graph_runner_utils.buffers import (
+    DecodeInputBuffers,
+)
+from sglang.srt.model_executor.cuda_graph_runner_utils.capture_mode import (
     _set_capture_lora_variant,
     model_capture_mode,
 )
-from sglang.srt.model_executor.cuda_graph_runner.deepep_adapter import (
+from sglang.srt.model_executor.cuda_graph_runner_utils.deepep_adapter import (
     DeepEPCudaGraphRunnerAdapter,
 )
 from sglang.srt.model_executor.forward_batch_info import (
