@@ -36,8 +36,8 @@ from sglang.srt.layers.utils import MultiPlatformOp
 from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import (
     BaseCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
-    enable_piecewise_cuda_graph,
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+    enable_tcpiecewise_cuda_graph,
 )
 
 if TYPE_CHECKING:
@@ -177,7 +177,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         self._language_model = language_model
 
         compiler = self._compile_config.compiler
-        with enable_piecewise_cuda_graph():
+        with enable_tcpiecewise_cuda_graph():
             try:
                 if compiler != "eager":
                     _toggle_multi_platform_ops(
@@ -237,7 +237,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
 
     @contextmanager
     def runtime_session(self):
-        with enable_piecewise_cuda_graph():
+        with enable_tcpiecewise_cuda_graph():
             yield
 
     @contextmanager
@@ -263,7 +263,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         per-shape ``num_finished_warmup`` counter (no capture); the
         second call triggers the actual cuda-graph capture because
         we are inside ``capture_session`` (which sets
-        ``set_pcg_capture_stream`` and ``enable_piecewise_cuda_graph``).
+        ``set_pcg_capture_stream`` and ``enable_tcpiecewise_cuda_graph``).
         Mirrors Full / Breakable's 2x warmup + 1x capture pattern.
         """
         for _ in range(2):

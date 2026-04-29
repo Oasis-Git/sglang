@@ -17,8 +17,8 @@ Public API:
     runners that were authored against the legacy public surface.
 """
 
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (  # noqa: F401
-    PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (  # noqa: F401
+    TCPIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
 )
 from sglang.srt.model_executor.cuda_graph_runner.base_runner import (  # noqa: F401
     BaseCudaGraphRunner,

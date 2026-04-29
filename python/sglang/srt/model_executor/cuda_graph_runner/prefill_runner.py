@@ -46,7 +46,7 @@ from sglang.srt.layers.pooler import EmbeddingPoolerOutput
 from sglang.srt.model_executor.cuda_graph_backend.factory import (
     resolve_prefill_backend,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
     set_forward_context,
 )
 from sglang.srt.model_executor.cuda_graph_runner.base_runner import (

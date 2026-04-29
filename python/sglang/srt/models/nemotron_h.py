@@ -22,9 +22,9 @@ import torch
 from torch import nn
 
 from sglang.srt.compilation.compilation_config import register_split_op
-from sglang.srt.model_executor.cuda_graph_backend_utils.piecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
     get_forward_context,
-    is_in_piecewise_cuda_graph,
+    is_in_tcpiecewise_cuda_graph,
 )
 from sglang.srt.configs import NemotronHConfig
 from sglang.srt.configs.nemotron_h import ATTENTION, MAMBA, MLP, MOE
@@ -439,7 +439,7 @@ class NemotronHMambaDecoderLayer(nn.Module):
             breakable_nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual
 
-        if is_in_piecewise_cuda_graph():
+        if is_in_tcpiecewise_cuda_graph():
             output = torch.empty_like(hidden_states)
             nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual
