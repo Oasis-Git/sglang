@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import random
+import sys
 import tempfile
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
@@ -32,6 +33,17 @@ from sglang.srt.environ import envs
 from sglang.srt.function_call.function_call_parser import FunctionCallParser
 from sglang.srt.layers.attention.fla.chunk_delta_h import CHUNK_SIZE as FLA_CHUNK_SIZE
 from sglang.srt.lora.lora_registry import LoRARef
+from sglang.srt.model_executor.cuda_graph_mode import (
+    ALL_PHASES,
+    ALLOWED_BACKENDS_PER_PHASE,
+    BACKEND_BREAKABLE,
+    BACKEND_DISABLED,
+    BACKEND_FULL,
+    BACKEND_TCPCG,
+    DEFAULT_CUDA_GRAPH_MODE,
+    PHASE_DECODE,
+    PHASE_PREFILL,
+)
 from sglang.srt.parser.reasoning_parser import ReasoningParser
 from sglang.srt.utils.common import (
     LORA_TARGET_ALL_MODULES,
@@ -798,9 +810,6 @@ class ServerArgs:
         # Set missing default values.
         self._handle_missing_default_values()
 
-        # Resolve cuda_graph_mode from JSON / convenience / legacy CLI flags;
-        # apply auto-disable rules; validate. Subsequent compat rules read /
-        # write ``self.cuda_graph_mode`` directly.
         self._handle_cuda_graph_config()
 
         # Handle device-specific backends.
@@ -1182,44 +1191,27 @@ class ServerArgs:
         self._validate_cuda_graph_mode()
 
     def _parse_cuda_graph_mode(self):
-        """Validate ``self.cuda_graph_mode`` and fill in defaults for any
-        unspecified phase. The canonical dict is populated by
-        ``from_cli_args`` (which merges JSON + convenience + legacy CLI
-        flags) or directly by callers constructing ``ServerArgs``
-        programmatically.
-        """
-        from sglang.srt.model_executor.cuda_graph_backend.factory import (
-            ALL_PHASES,
-            DEFAULT_CUDA_GRAPH_MODE,
-        )
-
-        explicit: Dict[str, str] = dict(self.cuda_graph_mode or {})
-        for phase in explicit:
-            if phase not in ALL_PHASES:
-                raise ValueError(
-                    f"cuda_graph_mode has unknown phase {phase!r}; "
-                    f"allowed: {ALL_PHASES}"
-                )
-
-        resolved: Dict[str, str] = dict(DEFAULT_CUDA_GRAPH_MODE)
-        for phase in ALL_PHASES:
-            if phase in explicit:
-                resolved[phase] = explicit[phase]
-        self.cuda_graph_mode = resolved
+        """Fill defaults for any unspecified phase in ``self.cuda_graph_mode``."""
+        self.cuda_graph_mode = {**DEFAULT_CUDA_GRAPH_MODE, **(self.cuda_graph_mode or {})}
 
     def _apply_cuda_graph_compatibility(self):
-        """Auto-disable piecewise (prefill) for known-incompatible
-        configurations. Each rule mutates
-        ``self.cuda_graph_mode["prefill"] = "disabled"`` in place.
-        ``--enforce-piecewise-cuda-graph`` bypasses the entire table.
+        """Auto-disable prefill cuda graph for incompatible configs.
+        Rules are split per backend — TCPCG and BCG have different
+        constraints. ``--enforce-piecewise-cuda-graph`` bypasses
+        everything.
         """
-        from sglang.srt.model_executor.cuda_graph_backend.factory import (
-            BACKEND_DISABLED,
-            PHASE_PREFILL,
-        )
-
         if self.enforce_piecewise_cuda_graph:
             return
+        if self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_TCPCG:
+            self._disable_tcpcg_if_incompatible()
+        elif self.cuda_graph_mode[PHASE_PREFILL] == BACKEND_BREAKABLE:
+            self._disable_bcg_if_incompatible()
+
+    def _disable_tcpcg_if_incompatible(self):
+        """TCPCG (torch.compile + piecewise) is incompatible with these
+        configurations. Most are torch.compile / dynamo limitations.
+        """
+        from sglang.srt.platforms import current_platform
 
         rules = [
             (
@@ -1235,12 +1227,18 @@ class ServerArgs:
             ),
             (
                 "OOT platform without piecewise support",
-                self._oot_platform_blocks_piecewise,
+                lambda: current_platform.is_out_of_tree()
+                and not current_platform.support_piecewise_cuda_graph(),
             ),
             ("MoE A2A backend", lambda: self.moe_a2a_backend != "none"),
             ("LoRA", lambda: bool(self.lora_paths) or self.enable_lora),
             ("multimodal model", lambda: self.get_model_config().is_multimodal),
-            ("GGUF quantization", self._gguf_blocks_piecewise),
+            (
+                "GGUF quantization",
+                lambda: self.load_format == "gguf"
+                or self.quantization == "gguf"
+                or check_gguf_file(self.model_path),
+            ),
             ("DLLM (diffusion LLM)", lambda: self.dllm_algorithm is not None),
             (
                 "CPU offload / hierarchical cache",
@@ -1260,58 +1258,29 @@ class ServerArgs:
             ("context parallel (attn_cp_size > 1)", lambda: self.attn_cp_size > 1),
             ("CUDA graph debug mode", lambda: self.debug_cuda_graph),
         ]
-
         for _name, predicate in rules:
             if predicate():
                 self.cuda_graph_mode[PHASE_PREFILL] = BACKEND_DISABLED
 
-    @staticmethod
-    def _oot_platform_blocks_piecewise() -> bool:
-        from sglang.srt.platforms import current_platform
-
-        return (
-            current_platform.is_out_of_tree()
-            and not current_platform.support_piecewise_cuda_graph()
-        )
-
-    def _gguf_blocks_piecewise(self) -> bool:
-        from sglang.srt.utils.hf_transformers_utils import check_gguf_file
-
-        return (
-            self.load_format == "gguf"
-            or self.quantization == "gguf"
-            or check_gguf_file(self.model_path)
-        )
+    def _disable_bcg_if_incompatible(self):
+        """BCG (segmented capture, no torch.compile). BCG enforces HIP
+        / memory-saver rejection in its own ``__init__``; config-time
+        rules can be added here as they're discovered.
+        """
+        return
 
     def _validate_cuda_graph_mode(self):
-        from sglang.srt.model_executor.cuda_graph_backend.factory import (
-            ALL_PHASES,
-            ALLOWED_BACKENDS_PER_PHASE,
-            BACKEND_FULL,
-            PHASE_PREFILL,
-        )
-
         mode = self.cuda_graph_mode or {}
         for phase, backend in mode.items():
+            msg = None
             if phase not in ALLOWED_BACKENDS_PER_PHASE:
-                raise ValueError(
-                    f"--cuda-graph-mode has unknown phase {phase!r}; "
-                    f"allowed: {ALL_PHASES}"
-                )
-            allowed = ALLOWED_BACKENDS_PER_PHASE[phase]
-            if backend not in allowed:
-                if phase == PHASE_PREFILL and backend == BACKEND_FULL:
-                    raise ValueError(
-                        "--cuda-graph-mode prefill='full' is not supported. "
-                        "Full CUDA graph capture only fits fixed-shape "
-                        "deployments and prefill is variable-shape. Use "
-                        "'breakable' or 'tcpcg' for prefill, or 'disabled' "
-                        "to skip cuda graphs there."
-                    )
-                raise ValueError(
-                    f"--cuda-graph-mode {phase}={backend!r} is not allowed; "
-                    f"allowed values for {phase}: {allowed}"
-                )
+                msg = f"unknown phase {phase!r}; allowed: {ALL_PHASES}"
+            elif backend not in ALLOWED_BACKENDS_PER_PHASE[phase]:
+                allowed = ALLOWED_BACKENDS_PER_PHASE[phase]
+                msg = f"{phase}={backend!r} not allowed; allowed: {allowed}"
+            if msg is not None:
+                logger.error("--cuda-graph-mode: %s", msg)
+                sys.exit(1)
 
     def _handle_multi_item_scoring(self):
         """Setup and validate multi-item scoring constraints.
@@ -6675,15 +6644,6 @@ class ServerArgs:
         Precedence (highest first): explicit ``--cuda-graph-mode`` JSON >
         per-phase convenience flags > legacy global flags.
         """
-        from sglang.srt.model_executor.cuda_graph_backend.factory import (
-            ALL_PHASES,
-            BACKEND_BREAKABLE,
-            BACKEND_DISABLED,
-            DEFAULT_CUDA_GRAPH_MODE,
-            PHASE_DECODE,
-            PHASE_PREFILL,
-        )
-
         explicit: Dict[str, str] = dict(getattr(args, "cuda_graph_mode", None) or {})
         for phase in explicit:
             if phase not in ALL_PHASES:

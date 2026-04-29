@@ -2,10 +2,8 @@
 
 Centralizes per-phase backend resolution so platform overrides (NPU,
 out-of-tree) and future backend additions can plug in without
-modifying the runner files.
-
-Phase / backend constants used both here and during the
-``ServerArgs`` config-resolution pass live in this module.
+modifying the runner files. Phase / backend identifiers used here
+live in :mod:`.cuda_graph_mode`.
 """
 
 from __future__ import annotations
@@ -19,6 +17,17 @@ from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import 
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
     BreakableCudaGraphBackend,
 )
+from sglang.srt.model_executor.cuda_graph_mode import (  # noqa: F401
+    ALL_PHASES,
+    ALLOWED_BACKENDS_PER_PHASE,
+    BACKEND_BREAKABLE,
+    BACKEND_DISABLED,
+    BACKEND_FULL,
+    BACKEND_TCPCG,
+    DEFAULT_CUDA_GRAPH_MODE,
+    PHASE_DECODE,
+    PHASE_PREFILL,
+)
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
@@ -30,32 +39,6 @@ if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Phase / backend constants
-# ---------------------------------------------------------------------------
-PHASE_DECODE = "decode"
-PHASE_PREFILL = "prefill"
-ALL_PHASES = (PHASE_DECODE, PHASE_PREFILL)
-
-BACKEND_FULL = "full"
-BACKEND_BREAKABLE = "breakable"
-BACKEND_TCPCG = "tcpcg"
-BACKEND_DISABLED = "disabled"
-
-ALLOWED_BACKENDS_PER_PHASE = {
-    PHASE_DECODE: (BACKEND_FULL, BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
-    # ``full`` is rejected for prefill — full CUDA graph capture only
-    # fits fixed-shape and prefill is variable-shape. Use ``breakable``
-    # or ``tcpcg`` for prefill.
-    PHASE_PREFILL: (BACKEND_BREAKABLE, BACKEND_TCPCG, BACKEND_DISABLED),
-}
-
-DEFAULT_CUDA_GRAPH_MODE = {
-    PHASE_DECODE: BACKEND_FULL,
-    PHASE_PREFILL: BACKEND_TCPCG,
-}
 
 # Track first occurrence of each fallback warning to avoid log spam.
 _TCPCG_DECODE_FALLBACK_LOGGED = False
