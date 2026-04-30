@@ -38,8 +38,6 @@ from sglang.srt.model_executor.cuda_graph_mode import (
     DEFAULT_CUDA_GRAPH_MODE,
     Backend,
     Phase,
-    is_phase_disabled,
-    is_phase_enabled,
     parse_cuda_graph_mode_arg,
 )
 from sglang.srt.parser.reasoning_parser import ReasoningParser
@@ -1183,7 +1181,7 @@ class ServerArgs:
 
     def _handle_xpu_backends(self):
         if self.device == "xpu":
-            if is_phase_enabled(self.cuda_graph_mode, Phase.PREFILL):
+            if self.is_cuda_graph_enabled(Phase.PREFILL):
                 logger.warning(
                     "XPU platform does not support piecewise CUDA graph, "
                     "disabling prefill cuda graph."
@@ -1193,6 +1191,14 @@ class ServerArgs:
     # ------------------------------------------------------------------
     # CUDA graph configuration resolution
     # ------------------------------------------------------------------
+    def is_cuda_graph_enabled(self, phase: str) -> bool:
+        """True if the given phase has any cuda graph backend (not ``disabled``)."""
+        return self.cuda_graph_mode[phase] != Backend.DISABLED
+
+    def is_cuda_graph_disabled(self, phase: str) -> bool:
+        """True if the given phase is ``disabled``."""
+        return self.cuda_graph_mode[phase] == Backend.DISABLED
+
     def _handle_cuda_graph_config(self):
         self._parse_cuda_graph_mode()
         self._apply_cuda_graph_compatibility()
@@ -1329,7 +1335,7 @@ class ServerArgs:
         if not self.enable_mis:
             return
 
-        if is_phase_enabled(self.cuda_graph_mode, Phase.DECODE):
+        if self.is_cuda_graph_enabled(Phase.DECODE):
             logger.warning("CUDA graph is disabled because --enable-mis is set.")
         self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
         self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
@@ -1513,7 +1519,7 @@ class ServerArgs:
                     reserved_mem += self.cuda_graph_max_bs * self.dp_size * 1.5
 
             # For piecewise cuda graphs
-            if is_phase_enabled(self.cuda_graph_mode, Phase.PREFILL):
+            if self.is_cuda_graph_enabled(Phase.PREFILL):
                 if not self.use_mla_backend():
                     # Only calculate the memory overhead for Non-Torch Memory use since the Torch Memory can be reused with Cuda Graph Capture
                     reserved_mem += len(self.piecewise_cuda_graph_tokens) * 8
@@ -1817,7 +1823,7 @@ class ServerArgs:
 
             else:
                 # DeepSeek V3/R1/V3.1
-                if is_phase_enabled(self.cuda_graph_mode, Phase.PREFILL):
+                if self.is_cuda_graph_enabled(Phase.PREFILL):
                     logger.info("Piecewise CUDA graph is enabled, use MLA for prefill.")
 
                 if is_sm100_supported():
@@ -3735,7 +3741,7 @@ class ServerArgs:
                 self.disaggregation_transfer_backend != "fake"
             ), "Prefill server does not support 'fake' as the transfer backend"
 
-            if is_phase_disabled(self.cuda_graph_mode, Phase.PREFILL):
+            if self.is_cuda_graph_disabled(Phase.PREFILL):
                 self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
                 self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
                 logger.warning(
@@ -4025,8 +4031,8 @@ class ServerArgs:
             return
         # On AMD/HIP, disable cuda graph for DLLM and use triton backend
         if is_hip():
-            if is_phase_enabled(self.cuda_graph_mode, Phase.DECODE) or is_phase_enabled(
-                self.cuda_graph_mode, Phase.PREFILL
+            if self.is_cuda_graph_enabled(Phase.DECODE) or self.is_cuda_graph_enabled(
+                Phase.PREFILL
             ):
                 logger.warning(
                     "Cuda graph is disabled for diffusion LLM inference on AMD GPUs"
@@ -4044,7 +4050,7 @@ class ServerArgs:
                     "Attention backend is overridden to 'ascend' when running on NPU for diffusion LLM inference."
                 )
                 self.attention_backend = "ascend"
-        elif is_phase_enabled(self.cuda_graph_mode, Phase.DECODE):
+        elif self.is_cuda_graph_enabled(Phase.DECODE):
             if self.attention_backend != "flashinfer":
                 logger.warning(
                     "Attention backend is set to flashinfer because of enabling cuda graph in diffusion LLM inference"

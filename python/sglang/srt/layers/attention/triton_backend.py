@@ -13,7 +13,7 @@ from sglang.srt.layers.attention.utils import create_flashinfer_kv_indices_trito
 from sglang.srt.layers.dp_attention import get_attention_tp_size
 from sglang.srt.layers.radix_attention import AttentionType
 from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
-from sglang.srt.model_executor.cuda_graph_mode import Phase, is_phase_disabled
+from sglang.srt.model_executor.cuda_graph_mode import Phase
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.speculative.spec_utils import generate_draft_decode_kv_indices
 from sglang.srt.utils import (
@@ -130,9 +130,10 @@ class TritonAttnBackend(AttentionBackend):
         )
         self.max_kv_splits = model_runner.server_args.triton_attention_num_kv_splits
 
-        self.allow_bidirectional_attention_in_extend = is_phase_disabled(
-            model_runner.server_args.cuda_graph_mode, Phase.DECODE
-        ) and (model_runner.server_args.chunked_prefill_size == -1)
+        self.allow_bidirectional_attention_in_extend = (
+            model_runner.server_args.is_cuda_graph_disabled(Phase.DECODE)
+            and model_runner.server_args.chunked_prefill_size == -1
+        )
 
         # Decide whether enable deterministic inference with batch-invariant operations
         self.enable_deterministic = (

@@ -30,7 +30,7 @@ from sglang.srt.distributed import (
 from sglang.srt.environ import envs
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.utils import MultiPlatformOp
-from sglang.srt.model_executor.cuda_graph_mode import Phase, is_phase_enabled
+from sglang.srt.model_executor.cuda_graph_mode import Phase
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cpu_has_amx_support,
@@ -107,7 +107,7 @@ class SiluAndMul(MultiPlatformOp):
         return out
 
     def forward_musa(self, x: torch.Tensor) -> torch.Tensor:
-        if is_phase_enabled(get_global_server_args().cuda_graph_mode, Phase.PREFILL):
+        if get_global_server_args().is_cuda_graph_enabled(Phase.PREFILL):
             return self.forward_native(x)
 
         if not hasattr(self, "_musa_swish_glu"):

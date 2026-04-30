@@ -48,16 +48,6 @@ DEFAULT_CUDA_GRAPH_MODE = {
 }
 
 
-def is_phase_disabled(cuda_graph_mode: Dict[str, str], phase: str) -> bool:
-    """True if ``cuda_graph_mode[phase] == "disabled"``."""
-    return cuda_graph_mode[phase] == Backend.DISABLED
-
-
-def is_phase_enabled(cuda_graph_mode: Dict[str, str], phase: str) -> bool:
-    """True if ``cuda_graph_mode[phase]`` is anything except ``disabled``."""
-    return cuda_graph_mode[phase] != Backend.DISABLED
-
-
 def parse_cuda_graph_mode_arg(raw: str) -> Dict[str, str]:
     """argparse type for ``--cuda-graph-mode``: parse JSON dict of phase → backend."""
     try:
