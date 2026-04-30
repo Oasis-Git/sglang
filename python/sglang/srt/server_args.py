@@ -43,6 +43,7 @@ from sglang.srt.model_executor.cuda_graph_mode import (
     parse_cuda_graph_mode_arg,
 )
 from sglang.srt.parser.reasoning_parser import ReasoningParser
+from sglang.srt.platforms import current_platform
 from sglang.srt.utils.common import (
     LORA_TARGET_ALL_MODULES,
     SUPPORTED_LORA_TARGET_MODULES,
@@ -828,7 +829,6 @@ class ServerArgs:
         self._handle_xpu_backends()
 
         # Allow OOT platform plugins to apply server args defaults.
-        from sglang.srt.platforms import current_platform
 
         current_platform.apply_server_args_defaults(self)
 
@@ -1248,7 +1248,6 @@ class ServerArgs:
         """TCPiecewise (torch.compile + piecewise) is incompatible with
         these configurations. Most are torch.compile / dynamo limitations.
         """
-        from sglang.srt.platforms import current_platform
 
         rules = [
             (
@@ -2493,7 +2492,6 @@ class ServerArgs:
             2.3 Otherwise, we will use triton backend.
         """
         # OOT platforms provide their own default attention backend.
-        from sglang.srt.platforms import current_platform
 
         if current_platform.is_out_of_tree():
             return current_platform.get_default_attention_backend()

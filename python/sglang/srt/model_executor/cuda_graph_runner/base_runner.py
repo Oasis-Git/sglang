@@ -21,15 +21,17 @@ import gc
 import logging
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, List, Sequence, Tuple
 
 import torch
 
 from sglang.srt.batch_overlap.two_batch_overlap import TboCudaGraphRunnerPlugin
 from sglang.srt.layers.dp_attention import (
+    get_attention_cp_size,
     get_attention_tp_rank,
     get_attention_tp_size,
 )
+from sglang.srt.utils import require_gathered_buffer
 
 if TYPE_CHECKING:
     from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import (
@@ -69,12 +71,6 @@ def get_batch_sizes_to_capture(
     Filters server_args.cuda_graph_bs by attention-tp/cp alignment
     constraints and clamps to req_to_token_pool.size.
     """
-    from sglang.srt.layers.dp_attention import (
-        get_attention_cp_size,
-        get_attention_tp_size,
-    )
-    from sglang.srt.utils import require_gathered_buffer
-
     server_args = model_runner.server_args
     capture_bs = server_args.cuda_graph_bs
     num_max_requests = model_runner.req_to_token_pool.size

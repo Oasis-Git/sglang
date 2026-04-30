@@ -27,6 +27,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph imp
     BreakableCUDAGraph,
     BreakableCUDAGraphCapture,
     eager_on_graph,
+    enable_breakable_cuda_graph,
 )
 from sglang.srt.utils import get_bool_env_var, is_hip
 from sglang.srt.utils.torch_memory_saver_adapter import TorchMemorySaverAdapter
@@ -159,10 +160,6 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
 
     @contextmanager
     def runtime_session(self):
-        from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph import (
-            enable_breakable_cuda_graph,
-        )
-
         with enable_breakable_cuda_graph():
             yield
 
