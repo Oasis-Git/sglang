@@ -14,7 +14,7 @@ import triton
 import triton.language as tl
 from einops import rearrange
 
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import Phase, is_phase_enabled
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cdiv,
@@ -181,7 +181,7 @@ def calc_rows_per_block(M: int, device: torch.device) -> int:
     # When piecewise cuda graph is enabled, use a constant value to avoid
     # torch.compile creating guards on the dynamic batch dimension.
     try:
-        if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
+        if is_phase_enabled(get_global_server_args().cuda_graph_mode, Phase.PREFILL):
             return MAX_ROWS_PER_BLOCK
     except ValueError:
         # Global server args not initialized (e.g., in unit tests)

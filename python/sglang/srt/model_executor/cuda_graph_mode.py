@@ -30,7 +30,12 @@ class Backend:
 
 
 ALLOWED_BACKENDS_PER_PHASE = {
-    Phase.DECODE: (Backend.FULL, Backend.BREAKABLE, Backend.TCPIECEWISE, Backend.DISABLED),
+    Phase.DECODE: (
+        Backend.FULL,
+        Backend.BREAKABLE,
+        Backend.TCPIECEWISE,
+        Backend.DISABLED,
+    ),
     # ``full`` is rejected for prefill — full CUDA graph capture only
     # fits fixed-shape and prefill is variable-shape. Use ``breakable``
     # or ``tcpiecewise`` for prefill.
@@ -41,6 +46,16 @@ DEFAULT_CUDA_GRAPH_MODE = {
     Phase.DECODE: Backend.FULL,
     Phase.PREFILL: Backend.TCPIECEWISE,
 }
+
+
+def is_phase_disabled(cuda_graph_mode: Dict[str, str], phase: str) -> bool:
+    """True if ``cuda_graph_mode[phase] == "disabled"``."""
+    return cuda_graph_mode[phase] == Backend.DISABLED
+
+
+def is_phase_enabled(cuda_graph_mode: Dict[str, str], phase: str) -> bool:
+    """True if ``cuda_graph_mode[phase]`` is anything except ``disabled``."""
+    return cuda_graph_mode[phase] != Backend.DISABLED
 
 
 def parse_cuda_graph_mode_arg(raw: str) -> Dict[str, str]:

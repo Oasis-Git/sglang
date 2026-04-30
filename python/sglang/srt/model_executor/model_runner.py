@@ -126,7 +126,12 @@ from sglang.srt.managers.schedule_batch import sanity_check_mm_pad_shift_value
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
 from sglang.srt.model_executor.cpu_graph_runner import CPUGraphRunner
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    is_phase_disabled,
+    is_phase_enabled,
+)
 from sglang.srt.model_executor.cuda_graph_runner import (
     DecodeInputBuffers,
     PrefillCudaGraphRunner,
@@ -680,7 +685,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         # Init lora
         if server_args.enable_lora:
             self.init_lora_manager()
-            if server_args.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
+            if is_phase_enabled(server_args.cuda_graph_mode, Phase.DECODE):
                 # Phase 1 of LoRA CUDA graph init: pre-allocate large MoE
                 # intermediate buffers before init_memory_pool() so memory
                 # profiling accounts for them.  Phase 2 (dense LoRA batch
@@ -2595,9 +2600,8 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         if self.server_args.model_impl.lower() == ModelImpl.MINDSPORE:
             return
 
-        if (
-            self.device != "cpu"
-            and self.server_args.cuda_graph_mode[Phase.DECODE] == Backend.DISABLED
+        if self.device != "cpu" and is_phase_disabled(
+            self.server_args.cuda_graph_mode, Phase.DECODE
         ):
             return
 

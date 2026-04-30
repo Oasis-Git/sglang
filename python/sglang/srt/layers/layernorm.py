@@ -26,7 +26,7 @@ from sglang.srt.batch_invariant_ops import (
 )
 from sglang.srt.environ import envs
 from sglang.srt.layers.utils import MultiPlatformOp
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import Phase, is_phase_enabled
 from sglang.srt.server_args import get_global_server_args
 from sglang.srt.utils import (
     cpu_has_amx_support,
@@ -333,7 +333,7 @@ class RMSNorm(MultiPlatformOp):
         residual: Optional[torch.Tensor] = None,
         post_residual_addition: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        if get_global_server_args().cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED:
+        if is_phase_enabled(get_global_server_args().cuda_graph_mode, Phase.PREFILL):
             return self.forward_native(x, residual, post_residual_addition)
 
         if not x.is_contiguous():
