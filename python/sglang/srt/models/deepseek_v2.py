@@ -119,7 +119,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import Phase, check_cuda_graph_enable
 from sglang.srt.model_executor.cuda_graph_runner import get_is_capture_mode
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.models.deepseek_common.attention_backend_handler import (
@@ -2087,8 +2087,7 @@ class DeepseekV2Model(nn.Module):
             # NOTE: torch dynamo does not support graph break in context manager
             ctx = (
                 nullcontext()
-                if get_global_server_args().cuda_graph_mode[Phase.PREFILL]
-                != Backend.DISABLED
+                if check_cuda_graph_enable(Phase.PREFILL)
                 else get_global_expert_distribution_recorder().with_current_layer(i)
             )
             with ctx:

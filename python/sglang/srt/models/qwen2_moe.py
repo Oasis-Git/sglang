@@ -83,7 +83,7 @@ from sglang.srt.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import Phase, check_cuda_graph_enable
 from sglang.srt.model_executor.cuda_graph_runner import get_is_capture_mode
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_loader.weight_utils import default_weight_loader
@@ -794,8 +794,7 @@ class Qwen2MoeModel(nn.Module):
             for i in range(self.start_layer, self.end_layer):
                 ctx = (
                     nullcontext()
-                    if get_global_server_args().cuda_graph_mode[Phase.PREFILL]
-                    != Backend.DISABLED
+                    if check_cuda_graph_enable(Phase.PREFILL)
                     else get_global_expert_distribution_recorder().with_current_layer(i)
                 )
                 with ctx:
