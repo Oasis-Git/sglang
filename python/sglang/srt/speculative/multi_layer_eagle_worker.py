@@ -26,7 +26,11 @@ from sglang.srt.layers.utils.logprob import add_output_logprobs_for_spec_v1
 from sglang.srt.managers.schedule_batch import ScheduleBatch
 from sglang.srt.managers.scheduler import GenerationBatchResult
 from sglang.srt.managers.tp_worker import TpModelWorker
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
     ForwardBatch,
@@ -215,7 +219,7 @@ class MultiLayerEagleWorker(TpModelWorker):
         """Capture cuda graphs."""
         self.cuda_graph_runner_for_draft_extend_list = []
 
-        if self.server_args.is_cuda_graph_disabled(Phase.DECODE):
+        if check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
             return
 
         # Capture extend

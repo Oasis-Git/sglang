@@ -28,7 +28,11 @@ from sglang.srt.managers.io_struct import (
 from sglang.srt.managers.schedule_batch import ModelWorkerBatch
 from sglang.srt.managers.scheduler import GenerationBatchResult
 from sglang.srt.managers.tp_worker import TpModelWorker
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.base_spec_worker import BaseDraftWorker, BaseSpecWorker
@@ -207,7 +211,7 @@ class MultiLayerEagleDraftWorker(BaseDraftWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.is_cuda_graph_disabled(Phase.DECODE):
+        if check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
             return
 
         self.cuda_graph_runner_for_draft_extend = (

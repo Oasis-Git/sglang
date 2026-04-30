@@ -25,7 +25,11 @@ from sglang.srt.mem_cache.common import (
     alloc_token_slots,
     get_last_loc,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.model_executor.forward_batch_info import (
     CaptureHiddenMode,
@@ -267,7 +271,7 @@ class EAGLEWorker(TpModelWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if self.server_args.is_cuda_graph_disabled(Phase.DECODE):
+        if check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
             return
 
         Device2DraftCudaGraphRunner = {
@@ -363,7 +367,7 @@ class EAGLEWorker(TpModelWorker):
                 target_model_runner.init_new_workspace = backup_init
 
             target_graph_runner = None
-            if self.server_args.is_cuda_graph_enabled(Phase.DECODE):
+            if not check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
                 target_graph_runner = DecodeCudaGraphRunner(
                     target_model_runner,
                     attn_backend=target_attn_backend,

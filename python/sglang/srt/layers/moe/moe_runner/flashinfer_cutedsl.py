@@ -11,7 +11,11 @@ from sglang.srt.layers.moe.moe_runner.base import (
     MoeRunnerConfig,
     register_fused_func,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 from sglang.srt.utils.common import log_info_on_rank0, print_warning_once
 
 if TYPE_CHECKING:
@@ -245,9 +249,7 @@ def ensure_cutedsl_wrapper(layer: torch.nn.Module) -> None:
     )
 
     server_args = get_global_server_args()
-    use_cuda_graph = server_args is not None and server_args.is_cuda_graph_enabled(
-        Phase.DECODE
-    )
+    use_cuda_graph = not check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED)
     max_num_tokens = max(
         getattr(server_args, "cuda_graph_max_bs", None) or 512,
         getattr(server_args, "chunked_prefill_size", None) or 8192,
