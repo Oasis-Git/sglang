@@ -3060,6 +3060,7 @@ class ServerArgs:
             if self.deepep_mode == "normal":
                 logger.warning("Cuda graph is disabled because deepep_mode=`normal`")
                 self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+                self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             self.ep_size = self.tp_size
             logger.warning(
                 f"DeepEP MoE is enabled. The expert parallel size is adjusted to be the same as the tensor parallel size[{self.tp_size}]."
@@ -3736,6 +3737,7 @@ class ServerArgs:
 
             if self.cuda_graph_mode[Phase.PREFILL] == Backend.DISABLED:
                 self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+                self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
                 logger.warning(
                     "Cuda graph is disabled for prefill server when piecewise cuda graph is not enabled."
                 )
@@ -4023,11 +4025,15 @@ class ServerArgs:
             return
         # On AMD/HIP, disable cuda graph for DLLM and use triton backend
         if is_hip():
-            if self.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED:
+            if (
+                self.cuda_graph_mode[Phase.DECODE] != Backend.DISABLED
+                or self.cuda_graph_mode[Phase.PREFILL] != Backend.DISABLED
+            ):
                 logger.warning(
                     "Cuda graph is disabled for diffusion LLM inference on AMD GPUs"
                 )
                 self.cuda_graph_mode[Phase.DECODE] = Backend.DISABLED
+                self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
             if self.attention_backend not in ["triton", "aiter"]:
                 logger.warning(
                     "Attention backend is set to triton for diffusion LLM inference on AMD GPUs"
