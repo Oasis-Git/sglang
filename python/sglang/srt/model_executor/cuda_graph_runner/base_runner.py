@@ -177,7 +177,28 @@ class BaseCudaGraphRunner(ABC):
     @abstractmethod
     def capture(self) -> None:
         """Outer capture loop. Iterates over shapes, calls
-        ``self._capture_one`` for each.
+        ``self.capture_one_shape`` for each.
+        """
+
+    @abstractmethod
+    def capture_one_shape(self, size: int, *args, **kwargs) -> Any:
+        """Per-shape capture: build a dummy ForwardBatch, run model
+        forward once into the backend's captured artifact for ``size``.
+        Decode passes the patched-model forward + stream/variant info;
+        prefill takes ``size`` only. Subclasses define the full signature.
+        """
+
+    @abstractmethod
+    def replay_prepare(
+        self,
+        forward_batch: "ForwardBatch",
+        **kwargs,
+    ) -> Any:
+        """Replay-time setup: pad to nearest captured bucket, populate
+        static input buffers from ``forward_batch``, init attention
+        metadata. Decode mutates state on ``self`` (no return); prefill
+        returns the static ``ForwardBatch`` model code reads during
+        replay. Caller (``replay``) consumes whatever is returned.
         """
 
     @abstractmethod
