@@ -27,7 +27,11 @@ from sglang.srt.mem_cache.swa_memory_pool import SWATokenToKVPoolAllocator
 from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
     is_in_tcpiecewise_cuda_graph,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.speculative.spec_info import SpecInput
 from sglang.srt.utils import (
@@ -245,10 +249,7 @@ class FlashInferAttnBackend(AttentionBackend):
         if is_sm100_supported():
             # Disable CUTLASS backend when piecewise cuda graph is enabled
             # due to TMA descriptor initialization issues on B200
-            if (
-                model_runner.server_args.cuda_graph_mode[Phase.PREFILL]
-                != Backend.DISABLED
-            ):
+            if check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE):
                 logger.warning(
                     "CUTLASS backend is disabled when piecewise cuda graph is enabled "
                     "due to TMA descriptor initialization issues on B200. "
