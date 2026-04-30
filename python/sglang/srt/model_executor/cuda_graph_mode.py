@@ -9,7 +9,7 @@ inside the function body to preserve that invariant.
 
 import argparse
 import json
-from typing import Dict, Optional
+from typing import Dict
 
 
 class Phase:
@@ -49,12 +49,11 @@ DEFAULT_CUDA_GRAPH_MODE = {
 }
 
 
-def check_cuda_graph_enable(phase: str, backend: Optional[str] = None) -> bool:
-    """True if cuda graph is enabled for ``phase`` on the global server args.
+def check_cuda_graph_enable(phase: str, backend: str) -> bool:
+    """True if ``cuda_graph_mode[phase] == backend`` on the global server args.
 
-    If ``backend`` is given, return True only when that specific backend is
-    selected for the phase. Returns False if the global server args have not
-    been initialized yet (e.g. unit tests, early startup).
+    Returns False if the global server args have not been initialized yet
+    (e.g. unit tests, early startup).
     """
     from sglang.srt.server_args import get_global_server_args
 
@@ -64,10 +63,7 @@ def check_cuda_graph_enable(phase: str, backend: Optional[str] = None) -> bool:
         return False
     if server_args.cuda_graph_mode is None:
         return False
-    current = server_args.cuda_graph_mode[phase]
-    if backend is None:
-        return current != Backend.DISABLED
-    return current == backend
+    return server_args.cuda_graph_mode[phase] == backend
 
 
 def parse_cuda_graph_mode_arg(raw: str) -> Dict[str, str]:

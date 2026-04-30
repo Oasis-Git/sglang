@@ -58,7 +58,11 @@ logger = logging.getLogger(__name__)
 
 from sglang.jit_kernel.triton.gdn_fused_proj import fused_qkvzba_split_reshape_cat
 from sglang.srt.layers.attention.fla.fused_norm_gate import FusedRMSNormGated
-from sglang.srt.model_executor.cuda_graph_mode import Phase, check_cuda_graph_enable
+from sglang.srt.model_executor.cuda_graph_mode import (
+    Backend,
+    Phase,
+    check_cuda_graph_enable,
+)
 
 _is_cuda = is_cuda()
 _is_npu = is_npu()
@@ -188,7 +192,7 @@ class Qwen3GatedDeltaNet(nn.Module):
                 device=torch.get_device_module().current_device(),
                 dtype=config.torch_dtype,
             )
-            if check_cuda_graph_enable(Phase.PREFILL)
+            if check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE)
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
@@ -357,7 +361,11 @@ class Qwen3GatedDeltaNet(nn.Module):
         return query, key, value, z, b, a
 
     def _forward_input_proj(self, hidden_states: torch.Tensor):
-        if _is_cpu or _is_npu or check_cuda_graph_enable(Phase.PREFILL):
+        if (
+            _is_cpu
+            or _is_npu
+            or check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE)
+        ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:
             DUAL_STREAM_TOKEN_THRESHOLD = 1024
