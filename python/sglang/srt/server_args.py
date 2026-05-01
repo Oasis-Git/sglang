@@ -1238,11 +1238,11 @@ class ServerArgs:
         if self.enforce_piecewise_cuda_graph:
             return
         if self.cuda_graph_mode[Phase.PREFILL] == Backend.TCPIECEWISE:
-            self._disable_tcpiecewise_if_incompatible()
+            self._disable_tcpiecewise_cudagraph_if_incompatible()
         elif self.cuda_graph_mode[Phase.PREFILL] == Backend.BREAKABLE:
-            self._disable_breakable_if_incompatible()
+            self._disable_breakable_cudagraph_if_incompatible()
 
-    def _disable_tcpiecewise_if_incompatible(self):
+    def _disable_tcpiecewise_cudagraph_if_incompatible(self):
         """TCPiecewise (torch.compile + piecewise) is incompatible with
         these configurations. Most are torch.compile / dynamo limitations.
         """
@@ -1296,12 +1296,26 @@ class ServerArgs:
             if predicate():
                 self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
 
-    def _disable_breakable_if_incompatible(self):
+    def _disable_breakable_cudagraph_if_incompatible(self):
         """Breakable (segmented capture, no torch.compile). Breakable enforces HIP
         / memory-saver rejection in its own ``__init__``; config-time
         rules can be added here as they're discovered.
         """
-        return
+        rules = [
+            # MLA prefill takes a different attn-forward path under BCG (no
+            # tcpiecewise gate), causing q.view shape mismatches. Disable
+            # until the MLA prefill path is BCG-aware.
+            ("MLA attention", lambda: self.use_mla_backend()),
+        ]
+        for name, predicate in rules:
+            if predicate():
+                logger.warning(
+                    "Breakable CUDA graph is incompatible with %s; "
+                    "disabling prefill CUDA graph.",
+                    name,
+                )
+                self.cuda_graph_mode[Phase.PREFILL] = Backend.DISABLED
+                return
 
     def _validate_cuda_graph_mode(self):
         mode = self.cuda_graph_mode or {}
