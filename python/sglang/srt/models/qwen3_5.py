@@ -72,7 +72,7 @@ from sglang.srt.layers.vocab_parallel_embedding import VocabParallelEmbedding
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.cuda_graph_runner import get_is_capture_mode
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
@@ -430,7 +430,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE)
+            or check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

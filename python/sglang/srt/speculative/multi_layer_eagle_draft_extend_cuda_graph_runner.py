@@ -35,7 +35,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils import (
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.cuda_graph_runner import (
     DecodeCudaGraphRunner,
@@ -619,7 +619,7 @@ class MultiLayerEagleMultiStepDraftExtendCudaGraphRunner:
         self._init_and_capture()
 
     def _init_and_capture(self):
-        if check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
+        if check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED):
             self.runners = [None] * self.speculative_num_steps
             return
 

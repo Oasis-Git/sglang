@@ -66,7 +66,7 @@ from sglang.srt.layers.moe import (
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.server_args import get_global_server_args
@@ -272,7 +272,7 @@ class AttnTpContext:
             and not is_dp_attention_enabled()
             and get_moe_a2a_backend().is_none()
             and not enable_moe_dense_fully_dp()
-            and not check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE)
+            and not check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
             and get_global_server_args().speculative_algorithm != "EAGLE3"
         )
         if get_global_server_args().enable_attn_tp_input_scattered:

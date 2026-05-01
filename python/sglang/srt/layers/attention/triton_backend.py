@@ -16,7 +16,7 @@ from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.speculative.spec_utils import generate_draft_decode_kv_indices
@@ -135,7 +135,7 @@ class TritonAttnBackend(AttentionBackend):
         self.max_kv_splits = model_runner.server_args.triton_attention_num_kv_splits
 
         self.allow_bidirectional_attention_in_extend = (
-            check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED)
+            check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED)
             and model_runner.server_args.chunked_prefill_size == -1
         )
 

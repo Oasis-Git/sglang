@@ -30,7 +30,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph i
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.speculative.spec_info import SpecInput
@@ -249,7 +249,7 @@ class FlashInferAttnBackend(AttentionBackend):
         if is_sm100_supported():
             # Disable CUTLASS backend when piecewise cuda graph is enabled
             # due to TMA descriptor initialization issues on B200
-            if check_cuda_graph_enable(Phase.PREFILL, Backend.TCPIECEWISE):
+            if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE):
                 logger.warning(
                     "CUTLASS backend is disabled when piecewise cuda graph is enabled "
                     "due to TMA descriptor initialization issues on B200. "

@@ -3,7 +3,7 @@
 
 Module-level imports are pure stdlib — no torch / sglang.srt deps — so
 ``ServerArgs`` can import everything here without pulling in backend
-classes. ``check_cuda_graph_enable`` lazy-imports ``get_global_server_args``
+classes. ``check_cuda_graph_backend`` lazy-imports ``get_global_server_args``
 inside the function body to preserve that invariant.
 """
 
@@ -49,7 +49,7 @@ DEFAULT_CUDA_GRAPH_MODE = {
 }
 
 
-def check_cuda_graph_enable(phase: str, backend: str) -> bool:
+def check_cuda_graph_backend(phase: str, backend: str) -> bool:
     """True if ``cuda_graph_mode[phase] == backend`` on the global server args.
 
     Returns False if the global server args have not been initialized yet

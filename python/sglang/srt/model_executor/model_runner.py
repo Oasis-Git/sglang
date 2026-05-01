@@ -129,7 +129,7 @@ from sglang.srt.model_executor.cpu_graph_runner import CPUGraphRunner
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.cuda_graph_runner import (
     DecodeInputBuffers,
@@ -684,7 +684,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         # Init lora
         if server_args.enable_lora:
             self.init_lora_manager()
-            if not check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
+            if not check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED):
                 # Phase 1 of LoRA CUDA graph init: pre-allocate large MoE
                 # intermediate buffers before init_memory_pool() so memory
                 # profiling accounts for them.  Phase 2 (dense LoRA batch
@@ -2599,7 +2599,7 @@ class ModelRunner(ModelRunnerKVCacheMixin):
         if self.server_args.model_impl.lower() == ModelImpl.MINDSPORE:
             return
 
-        if self.device != "cpu" and check_cuda_graph_enable(
+        if self.device != "cpu" and check_cuda_graph_backend(
             Phase.DECODE, Backend.DISABLED
         ):
             return

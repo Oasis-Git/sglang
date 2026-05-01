@@ -28,7 +28,7 @@ from sglang.srt.mem_cache.common import (
 from sglang.srt.model_executor.cuda_graph_mode import (
     Backend,
     Phase,
-    check_cuda_graph_enable,
+    check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.model_executor.forward_batch_info import (
@@ -271,7 +271,7 @@ class EAGLEWorker(TpModelWorker):
         self.cuda_graph_runner = None
         self.cuda_graph_runner_for_draft_extend = None
 
-        if check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
+        if check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED):
             return
 
         Device2DraftCudaGraphRunner = {
@@ -367,7 +367,7 @@ class EAGLEWorker(TpModelWorker):
                 target_model_runner.init_new_workspace = backup_init
 
             target_graph_runner = None
-            if not check_cuda_graph_enable(Phase.DECODE, Backend.DISABLED):
+            if not check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED):
                 target_graph_runner = DecodeCudaGraphRunner(
                     target_model_runner,
                     attn_backend=target_attn_backend,
