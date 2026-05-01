@@ -249,7 +249,9 @@ def ensure_cutedsl_wrapper(layer: torch.nn.Module) -> None:
     )
 
     server_args = get_global_server_args()
-    use_cuda_graph = not check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED)
+    use_cuda_graph = server_args is not None and not check_cuda_graph_backend(
+        Phase.DECODE, Backend.DISABLED
+    )
     max_num_tokens = max(
         getattr(server_args, "cuda_graph_max_bs", None) or 512,
         getattr(server_args, "chunked_prefill_size", None) or 8192,
