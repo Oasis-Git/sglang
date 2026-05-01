@@ -258,15 +258,8 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         forward_fn: Callable[[], Any],
         dummies: Optional[Any] = None,
     ) -> None:
-        """Per-shape warmup + record (steps 3 of the FX backend's per-
-        shape state machine; see ``cuda_piecewise_backend.py``).
-
-        The first ``forward_fn`` call increments the FX backend's
-        per-shape ``num_finished_warmup`` counter (no capture); the
-        second call triggers the actual cuda-graph capture because
-        we are inside ``capture_session`` (which sets
-        ``set_pcg_capture_stream`` and ``enable_tcpiecewise_cuda_graph``).
-        Mirrors Full / Breakable's 2x warmup + 1x capture pattern.
+        """Per-shape: call 1 warms FX state, call 2 captures the cuda
+        graph (inside ``capture_session``). See ``cuda_piecewise_backend.py``.
         """
         for _ in range(2):
             self._device_module.synchronize()

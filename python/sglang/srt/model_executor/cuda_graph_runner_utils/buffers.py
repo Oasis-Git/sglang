@@ -10,7 +10,7 @@ the same way as for non-cuda-graph forward paths.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 
@@ -21,9 +21,6 @@ from sglang.srt.model_executor.forward_batch_info import (
     compute_local_num_token_non_padded,
 )
 from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
-
-if TYPE_CHECKING:
-    pass
 
 
 _has_foreach_copy = hasattr(torch, "_foreach_copy_")
@@ -213,6 +210,7 @@ class DecodeInputBuffers(ForwardInputBuffers):
             if self.mamba_track_mask is not None:
                 self.mamba_track_mask.fill_(False)
 
+        # Build batched copy lists for all GPU tensors.
         dsts = [
             self.input_ids[:raw_num_token],
             self.req_pool_indices[:raw_bs],
@@ -275,6 +273,7 @@ class DecodeInputBuffers(ForwardInputBuffers):
                 dsts.append(self.num_token_non_padded)
                 srcs.append(forward_batch.num_token_non_padded)
 
+        # Pipeline-parallel proxy tensors.
         if pp_proxy_tensors is not None and self.pp_proxy_tensors is not None:
             for key, buf in self.pp_proxy_tensors.items():
                 src = pp_proxy_tensors.tensors[key]
@@ -282,6 +281,7 @@ class DecodeInputBuffers(ForwardInputBuffers):
                 dsts.append(buf[:dim])
                 srcs.append(src)
 
+        # SWA cache location (int32, separate from the int64 batch above).
         if (
             self.out_cache_loc_swa is not None
             and forward_batch.out_cache_loc_swa is not None
@@ -289,6 +289,7 @@ class DecodeInputBuffers(ForwardInputBuffers):
             dsts.append(self.out_cache_loc_swa[:raw_num_token])
             srcs.append(forward_batch.out_cache_loc_swa[:raw_num_token])
 
+        # Batch all GPU copies, grouped by dtype pair.
         _grouped_foreach_copy_(dsts, srcs)
 
         if forward_batch.seq_lens_cpu is not None:

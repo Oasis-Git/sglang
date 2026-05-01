@@ -34,10 +34,7 @@ _in_tcpiecewise_cuda_graph = False
 
 
 def is_in_tcpiecewise_cuda_graph() -> bool:
-    """True while inside the capture or replay window of any piecewise
-    CUDA graph backend (Breakable or tcpiecewise today; full backend does not toggle
-    this flag and does not need it). See plan §6.5.
-    """
+    """True while inside tcpiecewise CUDA graph capture/replay."""
     return _in_tcpiecewise_cuda_graph
 
 
