@@ -59,9 +59,9 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph imp
     eager_on_graph,
     is_in_breakable_cuda_graph,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
     get_forward_context,
-    is_in_tcpiecewise_cuda_graph,
+    is_in_tc_piecewise_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_loader.weight_utils import (
@@ -439,7 +439,7 @@ class NemotronHMambaDecoderLayer(nn.Module):
             breakable_nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual
 
-        if is_in_tcpiecewise_cuda_graph():
+        if is_in_tc_piecewise_cuda_graph():
             output = torch.empty_like(hidden_states)
             nemotron_mamba2_with_output(hidden_states, output, self.layer_id)
             return output, residual

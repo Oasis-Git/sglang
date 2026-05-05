@@ -6,10 +6,10 @@ sizes that fall in the compile bucket list and returns the raw forward
 otherwise. ``set_torch_compile_config`` flips the inductor/dynamo config
 flags expected by that path.
 
-Note: the prefill-tcpiecewise path (``TCPiecewiseCudaGraphBackend``) does NOT
+Note: the prefill-tc_piecewise path (``TcPiecewiseCudaGraphBackend``) does NOT
 use ``patch_model`` — it goes through ``compilation/compile.py``'s
 ``install_torch_compiled``. ``_to_torch`` here is duplicated by
-tcpiecewise's local ``_toggle_multi_platform_ops``; the duplication is kept
+tc_piecewise's local ``_toggle_multi_platform_ops``; the duplication is kept
 because the two paths have different lifecycle requirements.
 """
 

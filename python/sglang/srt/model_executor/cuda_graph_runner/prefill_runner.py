@@ -14,7 +14,7 @@
 """PrefillCudaGraphRunner — runs the EXTEND phase under a pluggable backend.
 
 Backend selection comes from ``cuda_graph_mode[Phase.PREFILL]``:
-  - ``"tcpiecewise"``     — default, ``TCPiecewiseCudaGraphBackend``: torch.compile
+  - ``"tc_piecewise"``     — default, ``TcPiecewiseCudaGraphBackend``: torch.compile
                       wraps the model; per-shape graphs live in
                       torch.compile's internal cache. Multi-batch supported.
   - ``"breakable"`` — ``BreakableCudaGraphBackend``: segmented capture (no
@@ -46,7 +46,7 @@ from sglang.srt.layers.pooler import EmbeddingPoolerOutput
 from sglang.srt.model_executor.cuda_graph_backend.factory import (
     resolve_prefill_backend,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
     set_forward_context,
 )
 from sglang.srt.model_executor.cuda_graph_runner.base_runner import (
@@ -269,7 +269,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
 
     def _run_dummy_forward(self, num_tokens: int) -> None:
         """Build a dummy ForwardBatch at this shape, init attn metadata,
-        run forward once. Used by ``TCPiecewiseCudaGraphBackend.prepare``
+        run forward once. Used by ``TcPiecewiseCudaGraphBackend.prepare``
         for both the JIT-activate forward (single shape, before
         torch.compile install) and the compile-loop pass (every shape,
         inside ``enable_torch_compile_warmup``).
@@ -286,7 +286,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
             return False
         if forward_batch.replace_embeds is not None:
             return False
-        # tcpiecewise captures with ForwardMode.EXTEND and spec_info=None.
+        # tc_piecewise captures with ForwardMode.EXTEND and spec_info=None.
         if forward_batch.forward_mode.is_target_verify():
             return False
         if forward_batch.capture_hidden_mode != self.capture_hidden_mode:

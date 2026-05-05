@@ -57,9 +57,9 @@ from sglang.srt.layers.quantization.compressed_tensors.schemes import (
 from sglang.srt.layers.quantization.fp8 import Fp8MoEMethod
 from sglang.srt.layers.quantization.modelopt_quant import ModelOptNvFp4FusedMoEMethod
 from sglang.srt.layers.quantization.unquant import UnquantizedFusedMoEMethod
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
     get_forward_context,
-    is_in_tcpiecewise_cuda_graph,
+    is_in_tc_piecewise_cuda_graph,
 )
 from sglang.srt.model_loader.weight_utils import narrow_padded_param_and_loaded_weight
 from sglang.srt.server_args import get_global_server_args
@@ -1028,7 +1028,7 @@ class FusedMoE(torch.nn.Module):
             )
 
     def forward(self, hidden_states: torch.Tensor, topk_output: TopKOutput):
-        if is_in_tcpiecewise_cuda_graph():
+        if is_in_tc_piecewise_cuda_graph():
             if TopKOutputChecker.format_is_standard(topk_output):
                 return moe_forward_piecewise_cuda_graph_impl(
                     hidden_states,

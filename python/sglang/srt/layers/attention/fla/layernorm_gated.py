@@ -183,7 +183,7 @@ def _get_sm_count(device: torch.device) -> int:
 def calc_rows_per_block(M: int, device: torch.device) -> int:
     # When piecewise cuda graph is enabled, use a constant value to avoid
     # torch.compile creating guards on the dynamic batch dimension.
-    if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE):
+    if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE):
         return MAX_ROWS_PER_BLOCK
     sm_count = _get_sm_count(device)
     rows_per_block = next_power_of_2(cdiv(M, 2 * sm_count))

@@ -111,7 +111,7 @@ class SiluAndMul(MultiPlatformOp):
         return out
 
     def forward_musa(self, x: torch.Tensor) -> torch.Tensor:
-        if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE):
+        if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE):
             return self.forward_native(x)
 
         if not hasattr(self, "_musa_swish_glu"):

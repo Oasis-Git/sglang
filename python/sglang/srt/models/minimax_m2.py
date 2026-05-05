@@ -606,7 +606,7 @@ class MiniMaxM2MoE(nn.Module):
         if router_logits is not None:
             ctx = (
                 nullcontext()
-                if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+                if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
                 else get_global_expert_distribution_recorder().with_current_layer(
                     self.layer_id
                 )
@@ -644,7 +644,7 @@ class MiniMaxM2MoE(nn.Module):
         if self.ep_size > 1:
             ctx = (
                 nullcontext()
-                if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+                if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
                 else get_global_expert_distribution_recorder().with_current_layer(
                     self.layer_id
                 )
@@ -1100,7 +1100,7 @@ class MiniMaxM2Model(nn.Module):
             for i in range(self.start_layer, self.end_layer):
                 ctx = (
                     nullcontext()
-                    if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+                    if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
                     else get_global_expert_distribution_recorder().with_current_layer(i)
                 )
                 with ctx:

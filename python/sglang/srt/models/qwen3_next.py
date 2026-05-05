@@ -192,7 +192,7 @@ class Qwen3GatedDeltaNet(nn.Module):
                 device=torch.get_device_module().current_device(),
                 dtype=config.torch_dtype,
             )
-            if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+            if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
@@ -364,7 +364,7 @@ class Qwen3GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+            or check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

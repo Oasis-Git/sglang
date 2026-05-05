@@ -1231,19 +1231,19 @@ class ServerArgs:
 
     def _apply_cuda_graph_compatibility(self):
         """Auto-disable prefill cuda graph for incompatible configs.
-        Rules are split per backend — TCPiecewise and Breakable have different
+        Rules are split per backend — TcPiecewise and Breakable have different
         constraints. ``--enforce-piecewise-cuda-graph`` bypasses
         everything.
         """
         if self.enforce_piecewise_cuda_graph:
             return
-        if self.cuda_graph_mode[Phase.PREFILL] == Backend.TCPIECEWISE:
-            self._disable_tcpiecewise_cudagraph_if_incompatible()
+        if self.cuda_graph_mode[Phase.PREFILL] == Backend.TC_PIECEWISE:
+            self._disable_tc_piecewise_cudagraph_if_incompatible()
         elif self.cuda_graph_mode[Phase.PREFILL] == Backend.BREAKABLE:
             self._disable_breakable_cudagraph_if_incompatible()
 
-    def _disable_tcpiecewise_cudagraph_if_incompatible(self):
-        """TCPiecewise (torch.compile + piecewise) is incompatible with
+    def _disable_tc_piecewise_cudagraph_if_incompatible(self):
+        """TcPiecewise (torch.compile + piecewise) is incompatible with
         these configurations. Most are torch.compile / dynamo limitations.
         """
 
@@ -1303,7 +1303,7 @@ class ServerArgs:
         """
         rules = [
             # MLA prefill takes a different attn-forward path under BCG (no
-            # tcpiecewise gate), causing q.view shape mismatches. Disable
+            # tc_piecewise gate), causing q.view shape mismatches. Disable
             # until the MLA prefill path is BCG-aware.
             ("MLA attention", lambda: self.use_mla_backend()),
         ]
@@ -5991,7 +5991,7 @@ class ServerArgs:
             default=ServerArgs.cuda_graph_mode,
             help="Per-phase CUDA graph mode as JSON, e.g. "
             '\'{"decode":"full","prefill":"breakable"}\'. '
-            "Allowed per phase: full, breakable, tcpiecewise, disabled. "
+            "Allowed per phase: full, breakable, tc_piecewise, disabled. "
             "JSON wins over the per-phase --{prefill,decode}-* flags.",
         )
 

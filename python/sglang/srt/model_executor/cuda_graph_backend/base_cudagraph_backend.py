@@ -8,7 +8,7 @@ backend-agnostic — it never branches on backend type.
 Today's three implementations:
 - ``FullCudaGraphBackend``     — one ``torch.cuda.CUDAGraph`` per shape.
 - ``BreakableCudaGraphBackend`` — segmented ``BreakableCUDAGraph`` per shape.
-- ``TCPiecewiseCudaGraphBackend`` — torch.compile wraps the model;
+- ``TcPiecewiseCudaGraphBackend`` — torch.compile wraps the model;
   per-shape graphs live inside torch.compile's internal cache.
 """
 
@@ -41,7 +41,7 @@ class BaseCudaGraphBackend(ABC):
            the captured artifact for ``shape_key`` with already-populated
            static buffers. May or may not consume ``static_forward_batch``
            depending on backend (Full/Breakable replay against static
-           buffers and ignore it; TCPiecewise dispatches by shape via
+           buffers and ignore it; TcPiecewise dispatches by shape via
            torch.compile and uses it).
         5. ``runtime_session()`` — context wrapping replay-time model
            code. Sets per-backend global flags so model code takes the

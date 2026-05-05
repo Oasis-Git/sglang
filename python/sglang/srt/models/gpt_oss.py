@@ -65,9 +65,9 @@ from sglang.srt.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
     get_forward_context,
-    is_in_tcpiecewise_cuda_graph,
+    is_in_tc_piecewise_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_loader.weight_utils import default_weight_loader
@@ -249,7 +249,7 @@ class GptOssSparseMoeBlock(nn.Module):
         should_allreduce_fusion: bool = False,
     ) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
-        if is_in_tcpiecewise_cuda_graph():
+        if is_in_tc_piecewise_cuda_graph():
             final_hidden_states = moe_impl(self.layer_id, hidden_states)
         else:
             router_logits, _ = self.router(hidden_states)

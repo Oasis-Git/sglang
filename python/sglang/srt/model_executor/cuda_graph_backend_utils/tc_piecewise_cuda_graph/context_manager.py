@@ -1,9 +1,9 @@
 """CUDA graph capture context manager + forward-context propagation.
 
 Owns two pieces of cross-cutting state used by *every* piecewise-style
-backend (currently breakable + tcpiecewise):
+backend (currently breakable + tc_piecewise):
 
-* ``_in_tcpiecewise_cuda_graph`` — a process-global flag set true while we
+* ``_in_tc_piecewise_cuda_graph`` — a process-global flag set true while we
   are inside the capture or replay window of a piecewise CUDA graph.
   Read by model code that needs to take the static-buffer / fixed-shape
   branch. See ``refactor/plan.md`` §6.5 for the full semantics.
@@ -30,35 +30,35 @@ if TYPE_CHECKING:
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 
 
-_in_tcpiecewise_cuda_graph = False
+_in_tc_piecewise_cuda_graph = False
 
 
-def is_in_tcpiecewise_cuda_graph() -> bool:
-    """True while inside tcpiecewise CUDA graph capture/replay."""
-    return _in_tcpiecewise_cuda_graph
+def is_in_tc_piecewise_cuda_graph() -> bool:
+    """True while inside tc_piecewise CUDA graph capture/replay."""
+    return _in_tc_piecewise_cuda_graph
 
 
 @contextmanager
-def enable_tcpiecewise_cuda_graph():
+def enable_tc_piecewise_cuda_graph():
     """Mark the enclosed scope as "we are inside a piecewise CUDA graph
-    capture/replay". Sets ``_in_tcpiecewise_cuda_graph`` true for the duration.
+    capture/replay". Sets ``_in_tc_piecewise_cuda_graph`` true for the duration.
 
     Errors during capture surface a hint that lets users disable the
     feature while filing a bug.
     """
-    global _in_tcpiecewise_cuda_graph
-    _in_tcpiecewise_cuda_graph = True
+    global _in_tc_piecewise_cuda_graph
+    _in_tc_piecewise_cuda_graph = True
     try:
         yield
     except Exception as e:
         logger.error(
             "Piecewise CUDA Graph failed with error: %s\n%s",
             e,
-            TCPIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
+            TC_PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG,
         )
         raise
     finally:
-        _in_tcpiecewise_cuda_graph = False
+        _in_tc_piecewise_cuda_graph = False
 
 
 @dataclass
@@ -99,7 +99,7 @@ def set_forward_context(
         _forward_context = None
 
 
-TCPIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG = (
+TC_PIECEWISE_CUDA_GRAPH_CAPTURE_FAILED_MSG = (
     "Piecewise CUDA Graph is enabled by default as an experimental feature.\n"
     "To work around this error, add --disable-piecewise-cuda-graph to your launch command.\n"
     "Please report this issue at https://github.com/sgl-project/sglang/issues/new/choose"

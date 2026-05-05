@@ -430,7 +430,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         if (
             _is_cpu
             or _is_npu
-            or check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+            or check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
         ):
             DUAL_STREAM_TOKEN_THRESHOLD = 0
         else:

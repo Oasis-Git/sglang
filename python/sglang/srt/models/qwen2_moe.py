@@ -798,7 +798,7 @@ class Qwen2MoeModel(nn.Module):
             for i in range(self.start_layer, self.end_layer):
                 ctx = (
                     nullcontext()
-                    if check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+                    if check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
                     else get_global_expert_distribution_recorder().with_current_layer(i)
                 )
                 with ctx:

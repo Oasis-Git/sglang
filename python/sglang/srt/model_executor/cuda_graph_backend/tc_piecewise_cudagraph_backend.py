@@ -1,4 +1,4 @@
-"""TCPiecewiseCudaGraphBackend — torch.compile-driven piecewise CUDA graph.
+"""TcPiecewiseCudaGraphBackend — torch.compile-driven piecewise CUDA graph.
 
 Uses ``CompilationConfig``, the FX/inductor pipeline from
 ``sglang.srt.compilation``, and the warmup-compile flag from
@@ -36,8 +36,8 @@ from sglang.srt.layers.utils import MultiPlatformOp
 from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import (
     BaseCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
-    enable_tcpiecewise_cuda_graph,
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
+    enable_tc_piecewise_cuda_graph,
 )
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ def _toggle_multi_platform_ops(
     """Recursively flip MultiPlatformOp submodules into / out of torch.compile mode.
 
     Mirrors the legacy ``_to_torch`` walk; lighter than the full
-    ``patch_model`` because tcpiecewise uses ``install_torch_compiled`` for
+    ``patch_model`` because tc_piecewise uses ``install_torch_compiled`` for
     actual compilation rather than calling ``torch.compile`` directly.
     """
     for sub in model._modules.values():
@@ -67,7 +67,7 @@ def _toggle_multi_platform_ops(
             _toggle_multi_platform_ops(sub, reverse=reverse, num_tokens=num_tokens)
 
 
-class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
+class TcPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
     """torch.compile-driven piecewise capture; attention metadata
     recomputed at replay (outside the compiled callable's sub-graphs).
     """
@@ -144,18 +144,18 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         not done here — that lives in ``capture_one`` (matches Full /
         Breakable: prepare = setup, capture_one = warmup + record).
 
-        Phase breakdown for tcpiecewise, paired with what Full / Breakable do:
+        Phase breakdown for tc_piecewise, paired with what Full / Breakable do:
 
           1. JIT-kernel-activate forward (1 call at smallest shape):
              warms shared CUDA kernels before torch.compile sees the
-             model. tcpiecewise-only.
+             model. tc_piecewise-only.
           2. install_compile: wraps ``language_model.model.forward``
-             with ``torch.compile``. tcpiecewise-only.
+             with ``torch.compile``. tc_piecewise-only.
           3. Compile-loop pass: 1 forward per shape inside
              ``enable_torch_compile_warmup`` — the FX backend short-
              circuits the cuda-graph branch (see
              ``cuda_piecewise_backend:143``) so this only triggers
-             FX/inductor compilation. tcpiecewise-only.
+             FX/inductor compilation. tc_piecewise-only.
           4. Per-shape warmup + record: handled by ``capture_one``;
              matches Full / Breakable's 2x warmup + 1x capture pattern.
 
@@ -179,7 +179,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
         self._language_model = language_model
 
         compiler = self._compile_config.compiler
-        with enable_tcpiecewise_cuda_graph():
+        with enable_tc_piecewise_cuda_graph():
             try:
                 if compiler != "eager":
                     _toggle_multi_platform_ops(
@@ -239,7 +239,7 @@ class TCPiecewiseCudaGraphBackend(BaseCudaGraphBackend):
 
     @contextmanager
     def runtime_session(self):
-        with enable_tcpiecewise_cuda_graph():
+        with enable_tc_piecewise_cuda_graph():
             yield
 
     @contextmanager

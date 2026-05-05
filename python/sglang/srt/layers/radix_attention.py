@@ -26,7 +26,7 @@ from sglang.srt.model_executor.cuda_graph_backend_utils.breakable_cuda_graph imp
     eager_on_graph,
     is_in_breakable_cuda_graph,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
     get_forward_context,
 )
 from sglang.srt.utils.custom_op import register_custom_op

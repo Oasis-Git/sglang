@@ -9,7 +9,7 @@ Public API:
   - ``FullCudaGraphBackend`` — single ``torch.cuda.CUDAGraph`` per shape.
   - ``BreakableCudaGraphBackend`` — segmented capture with eager break
     markers; no torch.compile.
-  - ``TCPiecewiseCudaGraphBackend`` — torch.compile-driven piecewise
+  - ``TcPiecewiseCudaGraphBackend`` — torch.compile-driven piecewise
     capture; FX-splits the model at attention layers.
 """
 
@@ -26,6 +26,6 @@ from sglang.srt.model_executor.cuda_graph_backend.factory import (  # noqa: F401
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (  # noqa: F401
     FullCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_backend.tcpiecewise_cudagraph_backend import (  # noqa: F401
-    TCPiecewiseCudaGraphBackend,
+from sglang.srt.model_executor.cuda_graph_backend.tc_piecewise_cudagraph_backend import (  # noqa: F401
+    TcPiecewiseCudaGraphBackend,
 )

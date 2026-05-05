@@ -12,8 +12,8 @@ from sglang.srt.layers.quantization.fp8_kernel import (
     per_tensor_quant_mla_fp8,
     per_token_group_quant_mla_deep_gemm_masked_fp8,
 )
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
-    is_in_tcpiecewise_cuda_graph,
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
+    is_in_tc_piecewise_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch
 from sglang.srt.models.deepseek_common.utils import (
@@ -562,7 +562,7 @@ class DeepseekMLAForwardMixin:
             )
             attn_bmm_output = attn_bmm_output.transpose(0, 1).flatten(1, 2)
         else:
-            if is_in_tcpiecewise_cuda_graph():
+            if is_in_tc_piecewise_cuda_graph():
                 # torch dynamo requires out= op was called where output tensor was non-contiguous
                 attn_bmm_output = (
                     torch.bmm(attn_output.transpose(0, 1), self.w_vc)

@@ -25,27 +25,27 @@ class Backend:
 
     FULL = "full"
     BREAKABLE = "breakable"
-    TCPIECEWISE = "tcpiecewise"
+    TC_PIECEWISE = "tc_piecewise"
     DISABLED = "disabled"
-    ALL = (FULL, BREAKABLE, TCPIECEWISE, DISABLED)
+    ALL = (FULL, BREAKABLE, TC_PIECEWISE, DISABLED)
 
 
 ALLOWED_BACKENDS_PER_PHASE = {
     Phase.DECODE: (
         Backend.FULL,
         Backend.BREAKABLE,
-        Backend.TCPIECEWISE,
+        Backend.TC_PIECEWISE,
         Backend.DISABLED,
     ),
     # ``full`` is rejected for prefill — full CUDA graph capture only
     # fits fixed-shape and prefill is variable-shape. Use ``breakable``
-    # or ``tcpiecewise`` for prefill.
-    Phase.PREFILL: (Backend.BREAKABLE, Backend.TCPIECEWISE, Backend.DISABLED),
+    # or ``tc_piecewise`` for prefill.
+    Phase.PREFILL: (Backend.BREAKABLE, Backend.TC_PIECEWISE, Backend.DISABLED),
 }
 
 DEFAULT_CUDA_GRAPH_MODE = {
     Phase.DECODE: Backend.FULL,
-    Phase.PREFILL: Backend.TCPIECEWISE,
+    Phase.PREFILL: Backend.TC_PIECEWISE,
 }
 
 

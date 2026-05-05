@@ -27,8 +27,8 @@ from sglang.srt.layers.attention.utils import (
 )
 from sglang.srt.layers.dp_attention import get_attention_tp_size
 from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant
-from sglang.srt.model_executor.cuda_graph_backend_utils.tcpiecewise_cuda_graph import (
-    is_in_tcpiecewise_cuda_graph,
+from sglang.srt.model_executor.cuda_graph_backend_utils.tc_piecewise_cuda_graph import (
+    is_in_tc_piecewise_cuda_graph,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.server_args import get_global_server_args
@@ -593,7 +593,7 @@ class TRTLLMMLABackend(FlashInferMLAAttnBackend):
             has_prefix = any(forward_batch.extend_prefix_lens_cpu)
             fallback_to_flashinfer_impl = (
                 self.disable_chunked_prefix_cache and has_prefix
-            ) or is_in_tcpiecewise_cuda_graph()
+            ) or is_in_tc_piecewise_cuda_graph()
             if fallback_to_flashinfer_impl:
                 super().init_forward_metadata(forward_batch)
 

@@ -272,7 +272,7 @@ class AttnTpContext:
             and not is_dp_attention_enabled()
             and get_moe_a2a_backend().is_none()
             and not enable_moe_dense_fully_dp()
-            and not check_cuda_graph_backend(Phase.PREFILL, Backend.TCPIECEWISE)
+            and not check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
             and get_global_server_args().speculative_algorithm != "EAGLE3"
         )
         if get_global_server_args().enable_attn_tp_input_scattered:
