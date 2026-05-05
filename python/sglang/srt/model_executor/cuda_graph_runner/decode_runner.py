@@ -25,6 +25,7 @@ Backend selection comes from ``cuda_graph_mode[Phase.DECODE]``:
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import logging
 from typing import TYPE_CHECKING, Callable, Optional, Union
@@ -448,9 +449,10 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             else:
                 set_pdmux_status(False)
                 for i, sg in enumerate(self.stream_groups):
-                    with graph_capture(
-                        stream=sg[1]
-                    ) as graph_capture_context, profile_context as prof:
+                    with (
+                        graph_capture(stream=sg[1]) as graph_capture_context,
+                        profile_context as prof,
+                    ):
                         self.stream = graph_capture_context.stream
                         with self.backend.capture_session(self.stream):
                             _capture_one_stream(i)
@@ -816,7 +818,16 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         # Full/Breakable backends it's unused (replay against static
         # buffers in place); for tc_piecewise-decode (not yet implemented) it
         # would feed args to the compiled callable.
-        with self.backend.runtime_session():
+        timer_ctx = (
+            self.model_runner.device_timer.wrap(
+                metadata={
+                    "category": forward_batch.forward_mode.name.lower(),
+                }
+            )
+            if self.model_runner.device_timer
+            else contextlib.nullcontext()
+        )
+        with timer_ctx, self.backend.runtime_session():
             output = self.backend.replay(graph_key, forward_batch)
 
         if isinstance(output, LogitsProcessorOutput):
