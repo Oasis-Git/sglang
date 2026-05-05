@@ -17,13 +17,13 @@ from sglang.srt.model_executor.cuda_graph_backend.base_cudagraph_backend import 
 from sglang.srt.model_executor.cuda_graph_backend.breakable_cudagraph_backend import (
     BreakableCudaGraphBackend,
 )
-from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 from sglang.srt.model_executor.cuda_graph_backend.full_cudagraph_backend import (
     FullCudaGraphBackend,
 )
 from sglang.srt.model_executor.cuda_graph_backend.tc_piecewise_cudagraph_backend import (
     TcPiecewiseCudaGraphBackend,
 )
+from sglang.srt.model_executor.cuda_graph_mode import Backend, Phase
 
 if TYPE_CHECKING:
     from sglang.srt.model_executor.model_runner import ModelRunner

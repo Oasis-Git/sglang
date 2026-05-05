@@ -115,9 +115,9 @@ class BreakableCudaGraphBackend(BaseCudaGraphBackend):
         (sliced to ``bs``) so captured segments read from fixed
         pointers.
         """
-        assert self._prefill_static is not None, (
-            "setup_prefill_state must run before capture"
-        )
+        assert (
+            self._prefill_static is not None
+        ), "setup_prefill_state must run before capture"
         s = self._prefill_static
         s["seq_lens"][:bs].fill_(num_tokens)
         s["extend_seq_lens"][:bs].fill_(num_tokens)

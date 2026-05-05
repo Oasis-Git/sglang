@@ -19,7 +19,6 @@ from contextlib import contextmanager
 
 import torch
 
-
 _in_torch_compile_warmup = False
 _pcg_capture_stream: "torch.cuda.Stream | None" = None
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Optional
 
-
 # Detect whether the current forward pass is in capture mode.
 is_capture_mode = False
 

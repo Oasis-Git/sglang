@@ -22,7 +22,6 @@ from sglang.srt.model_executor.forward_batch_info import (
 )
 from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
 
-
 _has_foreach_copy = hasattr(torch, "_foreach_copy_")
 
 
@@ -348,9 +347,7 @@ class PrefillInputBuffers(ForwardInputBuffers):
             positions = torch.zeros((max_num_tokens,), dtype=torch.int64)
 
             if is_multimodal:
-                input_embeds = torch.zeros(
-                    (max_num_tokens, hidden_size), dtype=dtype
-                )
+                input_embeds = torch.zeros((max_num_tokens, hidden_size), dtype=dtype)
                 mrope_positions = torch.zeros((3, max_num_tokens), dtype=torch.int64)
             else:
                 input_embeds = None
