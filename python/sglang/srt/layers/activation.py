@@ -67,7 +67,14 @@ elif _is_xpu:
 elif _is_hip:
     from sgl_kernel import gelu_and_mul, gelu_quick, gelu_tanh_and_mul, silu_and_mul
 elif _is_musa:
-    from sgl_kernel import silu_and_mul
+    from sglang.srt.utils.patch_torch import register_fake_if_exists
+
+    @register_fake_if_exists("aten::_fused_swiglu_forward")
+    def _(x):
+        d = x.shape[-1] // 2
+        output_shape = x.shape[:-1] + (d,)
+        return torch.empty(output_shape, dtype=x.dtype, device=x.device)
+
 
 if is_npu():
     import torch_npu

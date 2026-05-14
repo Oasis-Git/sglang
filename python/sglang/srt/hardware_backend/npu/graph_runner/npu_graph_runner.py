@@ -36,8 +36,14 @@ import torch
 
 from sglang.srt.configs.model_config import AttentionArch, is_deepseek_nsa
 from sglang.srt.distributed.parallel_state import GroupCoordinator
+from sglang.srt.environ import envs
 from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
-from sglang.srt.utils import get_bool_env_var, get_compiler_backend, is_npu
+from sglang.srt.utils import (
+    empty_context,
+    get_bool_env_var,
+    get_compiler_backend,
+    is_npu,
+)
 
 is_npu = is_npu()
 
@@ -145,6 +151,13 @@ class NPUGraphRunner(DecodeCudaGraphRunner):
             # In speculative decoding, these two fields are still needed.
             self.buffers.input_ids[: self.raw_num_token].copy_(forward_batch.input_ids)
             self.buffers.positions[: self.raw_num_token].copy_(forward_batch.positions)
+            if (
+                envs.SGLANG_ENABLE_OVERLAP_PLAN_STREAM.get()
+                and forward_batch.mrope_positions is not None
+            ):
+                self.buffers.mrope_positions[:, : self.raw_num_token].copy_(
+                    forward_batch.mrope_positions
+                )
 
         graph_key = self._make_graph_key(self.bs)
 

@@ -498,7 +498,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
 
         buffers.num_token_non_padded[...] = num_tokens
         if (
-            enable_num_token_non_padded(self.model_runner.server_args)
+            enable_num_token_non_padded()
             and self.require_gathered_buffer
             and not self.nsa_enable_prefill_cp
         ):
@@ -740,9 +740,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             require_gathered_buffer=self.require_gathered_buffer,
             num_tokens_per_bs=self.num_tokens_per_bs,
             nsa_enable_prefill_cp=self.nsa_enable_prefill_cp,
-            enable_num_token_non_padded_flag=enable_num_token_non_padded(
-                self.model_runner.server_args
-            ),
+            enable_num_token_non_padded_flag=enable_num_token_non_padded(),
             pp_proxy_tensors=pp_proxy_tensors,
         )
 
@@ -766,6 +764,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             attn_backend = self.model_runner.decode_attn_backend_group[stream_idx]
         else:
             attn_backend = self.attn_backend
+        # FIXME: implicit channel for backends (dsv4) that need forward_batch
+        # in replay metadata prep. Should become a real param on the interface.
+        attn_backend._replay_forward_batch = forward_batch
         attn_backend.init_forward_metadata_replay_cuda_graph(
             bs,
             buffers.req_pool_indices[:bs],
@@ -776,6 +777,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             forward_batch.spec_info,
             seq_lens_cpu=buffers.seq_lens_cpu[:bs],
         )
+        attn_backend._replay_forward_batch = None
 
         self.raw_bs = raw_bs
         self.raw_num_token = raw_num_token
@@ -874,6 +876,12 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
             if self.model_runner.is_draft_worker:
                 raise RuntimeError("This should not happen.")
             else:
+
+                capture_mode = (
+                    CaptureHiddenMode.NULL
+                    if self.model_runner.spec_algorithm.is_standalone()
+                    else CaptureHiddenMode.FULL
+                )
                 spec_info = EagleVerifyInput(
                     draft_token=None,
                     custom_mask=self.buffers.custom_mask,
@@ -885,7 +893,7 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
                     spec_steps=self.speculative_num_steps,
                     topk=self.model_runner.server_args.speculative_eagle_topk,
                     draft_token_num=self.speculative_num_draft_tokens,
-                    capture_hidden_mode=CaptureHiddenMode.FULL,
+                    capture_hidden_mode=capture_mode,
                     seq_lens_sum=None,
                     seq_lens_cpu=None,
                 )
