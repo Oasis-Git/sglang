@@ -35,6 +35,7 @@ from sglang.srt.model_executor.cuda_graph_mode import (
     Phase,
     check_cuda_graph_backend,
 )
+from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.adaptive_runtime_state import (
@@ -861,8 +862,8 @@ class EAGLEWorkerV2(BaseSpecWorker):
                 target_model_runner.init_new_workspace = backup_init
 
             target_graph_runner = None
-            if not self.server_args.disable_cuda_graph:
-                target_graph_runner = CudaGraphRunner(
+            if not check_cuda_graph_backend(Phase.DECODE, Backend.DISABLED):
+                target_graph_runner = DecodeCudaGraphRunner(
                     target_model_runner,
                     attn_backend=target_attn_backend,
                     speculative_num_steps=speculative_num_steps,

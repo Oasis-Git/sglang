@@ -39,7 +39,6 @@ from sglang.srt.distributed.parallel_state import GroupCoordinator
 from sglang.srt.environ import envs
 from sglang.srt.model_executor.cuda_graph_runner import DecodeCudaGraphRunner
 from sglang.srt.utils import (
-    empty_context,
     get_bool_env_var,
     get_compiler_backend,
     is_npu,
