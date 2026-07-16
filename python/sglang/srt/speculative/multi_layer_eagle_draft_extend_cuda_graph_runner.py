@@ -41,8 +41,8 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardMode,
 )
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    forward_context,
+    AttnForwardContext,
+    attn_forward_context,
 )
 from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
 from sglang.srt.model_executor.runner import (
@@ -383,7 +383,7 @@ class MultiLayerEagleDraftExtendCudaGraphRunner(DecodeCudaGraphRunner):
             forward_batch.spec_info.hidden_states = hidden_states_backup
             return ret
 
-        with forward_context(ForwardContext(attn_backend=attn_backend)):
+        with attn_forward_context(AttnForwardContext(attn_backend=attn_backend)):
             attn_backend.init_forward_metadata_out_graph(forward_batch, in_capture=True)
             self.deepep_adapter.capture(is_extend_in_batch=True)
             shape_key = self._make_graph_key(bs)

@@ -9,8 +9,8 @@ from sglang.srt.layers.radix_attention import RadixAttention
 from sglang.srt.mem_cache.memory_pool import MLATokenToKVPool
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    set_forward_context,
+    AttnForwardContext,
+    set_attn_forward_context,
 )
 from sglang.test.test_utils import CustomTestCase
 
@@ -118,7 +118,7 @@ class TestFlashAttentionMLABackend(CustomTestCase):
         self.ref_backend = TorchNativeAttnBackend(self.model_runner)
         self.num_local_heads = 2
         # Publish the backend so RadixAttention.forward resolves correctly.
-        set_forward_context(ForwardContext(attn_backend=self.backend))
+        set_attn_forward_context(AttnForwardContext(attn_backend=self.backend))
 
     def _init_model_runner(self):
         self.model_runner = MockModelRunner(
@@ -220,7 +220,7 @@ class TestFlashAttentionMLABackend(CustomTestCase):
                 seq_lens_cpu=torch.tensor([total_len] * self.batch_size, device="cpu"),
             )
 
-        # Pool refs are resolved via the active ForwardContext (published in
+        # Pool refs are resolved via the active AttnForwardContext (published in
         # setUp); the fixture no longer needs to attach them to forward_batch.
         return forward_batch
 

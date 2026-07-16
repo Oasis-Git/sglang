@@ -35,7 +35,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     PPProxyTensors,
     enable_num_token_non_padded,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.runner_utils.capture_mode import model_capture_mode
 from sglang.srt.runtime_context import get_flags, get_parallel
 from sglang.srt.utils import (
@@ -826,8 +829,8 @@ class CPUGraphRunner:
             else empty_context()
         )
         with skip_ctx:
-            with forward_context(
-                ForwardContext(attn_backend=self.model_runner.attn_backend)
+            with attn_forward_context(
+                AttnForwardContext(attn_backend=self.model_runner.attn_backend)
             ):
                 self.model_runner.attn_backend.init_forward_metadata_capture_cpu_graph(
                     bs,

@@ -39,15 +39,17 @@ from sglang.srt.model_executor.forward_batch_deepseek_mha_mixin import (
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    forward_context,
+    AttnForwardContext,
+    attn_forward_context,
     get_req_to_token_pool,
     get_token_to_kv_pool,
 )
 from sglang.srt.model_executor.runner.base_runner import BaseRunner
 from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
     enable_tc_piecewise_cuda_graph,
-    set_tc_piecewise_forward_context,
+)
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    set_forward_context,
 )
 from sglang.srt.utils import is_hip
 from sglang.srt.utils.common import ceil_align, require_mlp_sync
@@ -208,11 +210,11 @@ class EagerRunner(BaseRunner):
     ) -> Tuple[Any, contextlib.AbstractContextManager]:
         """Resolve the (attn_backend, forward_context) the eager decode forward
         runs under. PDmux selects a per-stream backend and publishes it via an
-        active ForwardContext; non-pdmux uses attn_backend + the ambient ctx."""
+        active AttnForwardContext; non-pdmux uses attn_backend + the ambient ctx."""
         model_runner = self.model_runner
         if self.enable_pdmux:
-            return model_runner.decode_attn_backend, forward_context(
-                ForwardContext(attn_backend=model_runner.decode_attn_backend)
+            return model_runner.decode_attn_backend, attn_forward_context(
+                AttnForwardContext(attn_backend=model_runner.decode_attn_backend)
             )
         return model_runner.attn_backend, contextlib.nullcontext()
 
@@ -324,7 +326,7 @@ class EagerRunner(BaseRunner):
                 # and PCG-specific MoE/attention paths stay consistent.
                 with (
                     enable_tc_piecewise_cuda_graph(),
-                    set_tc_piecewise_forward_context(
+                    set_forward_context(
                         forward_batch,
                         model_runner.attention_layers,
                         getattr(model_runner.model, "quant_config", None),

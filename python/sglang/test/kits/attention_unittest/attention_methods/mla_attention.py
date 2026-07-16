@@ -18,8 +18,8 @@ from sglang.srt.model_executor.cuda_graph_config import (
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    forward_context,
+    AttnForwardContext,
+    attn_forward_context,
     get_token_to_kv_pool,
 )
 from sglang.srt.model_executor.graph_shared_output import GraphSharedOutput
@@ -830,7 +830,7 @@ def _populate_prefix_kv(
     loc_tensor = torch.tensor(locs, dtype=torch.int64, device=runner.device)
     cache_k = torch.cat(keys, dim=0)
     cache_k_rope = torch.cat(ropes, dim=0)
-    with forward_context(ForwardContext(attn_backend=backend)):
+    with attn_forward_context(AttnForwardContext(attn_backend=backend)):
         module.write_kv_cache(loc_tensor, cache_k, cache_k_rope)
 
 
@@ -966,7 +966,9 @@ def build_mla_attention_fixture(
 
 
 def run_mla_fixture_eager(fixture: MLAAttentionFixture) -> torch.Tensor:
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         return fixture.actual_module(fixture.input_hidden, fixture.forward_batch)
 

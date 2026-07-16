@@ -32,7 +32,7 @@ register_amd_ci(est_time=20, suite="stage-b-test-1-gpu-large-amd")
 class TestTritonLightningBackendCorrectness(CustomTestCase):
     CASES = make_lightning_cases("triton")
     # Lightning installs `LightningAttentionBackend` directly via
-    # `ForwardContext` (not through `HybridLinearAttnBackend`), but the
+    # `AttnForwardContext` (not through `HybridLinearAttnBackend`), but the
     # `MambaAttnBackendBase` capture/replay contract still applies. See
     # lightning/README.md.
     CUDA_GRAPH_CASES = (

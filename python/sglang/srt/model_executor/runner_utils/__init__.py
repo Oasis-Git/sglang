@@ -1,10 +1,10 @@
 """Low-level utilities used by the CUDA graph runners.
 
 Mirror of cuda_graph_backend_utils/ for runner-side state — buffer
-dataclasses, process-global capture flags, the speculative-shared
-graph memory pool, and the DeepEP capture/replay adapter. Runners in
-cuda_graph_runner/ import from here; nothing here should import
-back into cuda_graph_runner/.
+dataclasses, process-global capture flags, the runner forward context,
+the speculative-shared graph memory pool, and the DeepEP capture/replay
+adapter. Runners in cuda_graph_runner/ import from here; nothing here
+should import back into cuda_graph_runner/.
 """
 
 from sglang.srt.model_executor.runner_utils.buffers import (  # noqa: F401
@@ -19,10 +19,28 @@ from sglang.srt.model_executor.runner_utils.capture_mode import (  # noqa: F401
     get_is_capture_mode,
     model_capture_mode,
 )
-from sglang.srt.model_executor.runner_utils.deepep_adapter import (  # noqa: F401
-    DeepEPCudaGraphRunnerAdapter,
+from sglang.srt.model_executor.runner_utils.forward_context import (  # noqa: F401
+    RunnerForwardContext,
+    get_forward_context,
+    set_forward_context,
 )
 from sglang.srt.model_executor.runner_utils.pool import (  # noqa: F401
     get_global_graph_memory_pool,
     set_global_graph_memory_pool,
 )
+
+
+def __getattr__(name: str):
+    # DeepEPCudaGraphRunnerAdapter is exposed lazily (PEP 562): its module
+    # pulls in the MoE token-dispatcher stack, and forward_context made this
+    # package importable from low-level layers code (quantization, attention).
+    # An eager import here closes a cycle: layers.quantization -> runner_utils
+    # -> token_dispatcher -> eplb -> metrics_collector -> disaggregation.utils
+    # -> configs.model_config -> layers.quantization.
+    if name == "DeepEPCudaGraphRunnerAdapter":
+        from sglang.srt.model_executor.runner_utils.deepep_adapter import (
+            DeepEPCudaGraphRunnerAdapter,
+        )
+
+        return DeepEPCudaGraphRunnerAdapter
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

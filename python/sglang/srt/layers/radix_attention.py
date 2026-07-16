@@ -27,8 +27,8 @@ from sglang.srt.model_executor.runner_backend_utils.breakable_cuda_graph import 
     eager_on_graph,
     is_in_breakable_cuda_graph,
 )
-from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
-    get_tc_piecewise_forward_context,
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    get_forward_context,
 )
 from sglang.srt.utils import is_hip
 from sglang.srt.utils.custom_op import register_custom_op
@@ -140,10 +140,7 @@ class RadixAttention(nn.Module):
             else:
                 k = k.view(-1, self.tp_k_head_num, self.v_head_dim)
 
-        if (
-            forward_batch.forward_mode.is_extend()
-            and get_tc_piecewise_forward_context() is not None
-        ):
+        if forward_batch.forward_mode.is_extend() and get_forward_context() is not None:
             if kwargs.get("idx_q") is not None:
                 if is_in_breakable_cuda_graph():
                     return get_attn_backend().forward(
@@ -214,7 +211,7 @@ def unified_attention_with_output(
     llama_4_scaling: Optional[torch.Tensor] = None,
     topk_indices: Optional[torch.Tensor] = None,
 ) -> None:
-    context = get_tc_piecewise_forward_context()
+    context = get_forward_context()
     forward_batch = context.forward_batch
     attention_layers = context.attention_layers
     attention_layer = attention_layers[layer_id]
@@ -299,7 +296,7 @@ def unified_sparse_attention_with_output(
     *,
     idx_v: Optional[torch.Tensor] = None,
 ) -> None:
-    context = get_tc_piecewise_forward_context()
+    context = get_forward_context()
     forward_batch = context.forward_batch
     attention_layer = context.attention_layers[layer_id]
     real_num_tokens = forward_batch.num_token_non_padded_cpu

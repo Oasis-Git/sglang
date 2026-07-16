@@ -16,7 +16,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardBatch,
     ForwardMode,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
 from sglang.srt.model_executor.runner import (
     DecodeCudaGraphRunner,
@@ -347,7 +350,9 @@ class FrozenKVMTPCudaGraphRunner(DecodeCudaGraphRunner):
         saved_backend_pool = self.draft_attn_backend.token_to_kv_pool
         self.draft_attn_backend.token_to_kv_pool = target_pool
         try:
-            with forward_context(ForwardContext(attn_backend=self.draft_attn_backend)):
+            with attn_forward_context(
+                AttnForwardContext(attn_backend=self.draft_attn_backend)
+            ):
                 self.frozen_kv_mtp_worker._init_frozen_kv_metadata_capture_cuda_graph(
                     forward_batch
                 )

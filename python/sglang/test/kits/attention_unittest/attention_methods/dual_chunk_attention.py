@@ -17,7 +17,10 @@ from sglang.srt.model_executor.cuda_graph_config import (
     PhaseConfig,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.model_runner import ModelRunner
 from sglang.srt.runtime_context import get_context, get_parallel
 
@@ -718,7 +721,9 @@ def build_dual_chunk_attention_fixture(
 
 
 def run_dual_chunk_fixture_eager(fixture: DualChunkAttentionFixture) -> torch.Tensor:
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         return fixture.actual_module(fixture.input_hidden, fixture.forward_batch)
 

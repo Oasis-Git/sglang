@@ -1,17 +1,17 @@
 """Per-forward-call control context.
 
-Owns ForwardContext — a frozen dataclass holding control configs the model
-layer reads at depth via get_forward_context(). The only mandatory field
+Owns AttnForwardContext — a frozen dataclass holding control configs the model
+layer reads at depth via get_attn_forward_context(). The only mandatory field
 today is attn_backend; pool refs are derived from attn_backend.*
-(every backend caches them at __init__), so a published ForwardContext
+(every backend caches them at __init__), so a published AttnForwardContext
 is enough to resolve the active pools without a separate global.
 
-ModelRunner._forward_raw publishes a fresh ForwardContext for the
+ModelRunner._forward_raw publishes a fresh AttnForwardContext for the
 duration of each forward; callers that need a per-call override (PDmux
 per-stream backend, frozen-KV MTP draft loop, TBO per-child dispatch) use
-dataclasses.replace and wrap the override scope with forward_context().
+dataclasses.replace and wrap the override scope with attn_forward_context().
 
-Distinct from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph.TcPiecewiseForwardContext,
+Distinct from sglang.srt.model_executor.runner_utils.forward_context.RunnerForwardContext,
 which collects compilation-time refs for the piecewise CUDA graph backend.
 
 Concurrency: _current is a plain module-level global, not thread-local.
@@ -32,39 +32,41 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ForwardContext:
-    """Per-forward-call control configs. Read via get_forward_context();
+class AttnForwardContext:
+    """Per-forward-call control configs. Read via get_attn_forward_context();
     extend by adding fields here. Frozen so accidental mutation raises at
     write time — use dataclasses.replace for per-call overrides."""
 
     attn_backend: AttentionBackend
 
 
-_current: Optional[ForwardContext] = None
+_current: Optional[AttnForwardContext] = None
 
 
-def set_forward_context(ctx: Optional[ForwardContext]) -> Optional[ForwardContext]:
+def set_attn_forward_context(
+    ctx: Optional[AttnForwardContext],
+) -> Optional[AttnForwardContext]:
     """Set the active context; return the previous one for explicit
-    save/restore. Prefer the forward_context() context manager."""
+    save/restore. Prefer the attn_forward_context() context manager."""
     global _current
     prev, _current = _current, ctx
     return prev
 
 
-def has_forward_context() -> bool:
+def has_attn_forward_context() -> bool:
     return _current is not None
 
 
-def get_forward_context() -> ForwardContext:
+def get_attn_forward_context() -> AttnForwardContext:
     assert _current is not None, (
-        "no forward context active — call forward_context(...) or set_forward_context(...) "
-        "before reading get_forward_context()."
+        "no forward context active — call attn_forward_context(...) or set_attn_forward_context(...) "
+        "before reading get_attn_forward_context()."
     )
     return _current
 
 
 def get_attn_backend() -> AttentionBackend:
-    return get_forward_context().attn_backend
+    return get_attn_forward_context().attn_backend
 
 
 def get_token_to_kv_pool() -> KVCache:
@@ -76,9 +78,9 @@ def get_req_to_token_pool() -> ReqToTokenPool:
 
 
 @contextmanager
-def forward_context(ctx: ForwardContext):
-    prev = set_forward_context(ctx)
+def attn_forward_context(ctx: AttnForwardContext):
+    prev = set_attn_forward_context(ctx)
     try:
         yield
     finally:
-        set_forward_context(prev)
+        set_attn_forward_context(prev)

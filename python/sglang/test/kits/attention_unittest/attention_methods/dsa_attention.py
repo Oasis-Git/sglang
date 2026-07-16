@@ -15,7 +15,10 @@ from sglang.srt.model_executor.cuda_graph_config import (
     PhaseConfig,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.model_runner import ModelRunner
 from sglang.srt.runtime_context import get_context, get_parallel
 
@@ -928,7 +931,9 @@ def run_dsa_fixture_eager(fixture: DSAAttentionFixture, testcase) -> torch.Tenso
     )
     q, _, _ = fixture.actual_module.project_qkv(fixture.input_hidden)
     _, k, v = fixture.actual_module.project_qkv(kv_hidden)
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         if not fixture.backend.use_mha:
             testcase.skipTest("DSA MHA_ONE_SHOT dense fallback is not selected here.")
@@ -960,7 +965,9 @@ def run_dsa_sparse_fixture_eager(
     module = fixture.actual_module
     q_nope, q_rope = module.project_q(fixture.input_hidden)
     k_nope, k_rope = module.project_k(fixture.input_hidden)
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         if fixture.case.forward_mode.is_extend_without_speculative():
             testcase.assertFalse(

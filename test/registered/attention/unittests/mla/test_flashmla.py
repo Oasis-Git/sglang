@@ -6,7 +6,10 @@ import torch
 import triton
 
 from sglang.srt.model_executor.forward_batch_info import ForwardMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.test.test_utils import CustomTestCase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -384,8 +387,8 @@ class TestFlashMLAAttentionBackendCorrectness(CustomTestCase):
         )
 
         fixture = self._build_target_verify_metadata_fixture(case)
-        with torch.no_grad(), forward_context(
-            ForwardContext(attn_backend=fixture.backend)
+        with torch.no_grad(), attn_forward_context(
+            AttnForwardContext(attn_backend=fixture.backend)
         ):
             fixture.backend.init_forward_metadata(fixture.forward_batch)
 
@@ -421,7 +424,9 @@ class TestFlashMLAAttentionBackendCorrectness(CustomTestCase):
 
         fixture = self._build_target_verify_metadata_fixture(case)
         backend = fixture.backend
-        with torch.no_grad(), forward_context(ForwardContext(attn_backend=backend)):
+        with torch.no_grad(), attn_forward_context(
+            AttnForwardContext(attn_backend=backend)
+        ):
             backend.init_cuda_graph_state(
                 max_bs=bs,
                 max_num_tokens=bs * num_draft_tokens,

@@ -3,7 +3,10 @@ from typing import Any, Callable
 
 import torch
 
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 
 from ..attention_methods.dense_attention import DEFAULT_DEVICE as DENSE_DEFAULT_DEVICE
 from ..attention_methods.dense_attention import DEFAULT_DTYPE as DENSE_DEFAULT_DTYPE
@@ -401,7 +404,9 @@ def _run_cuda_graph_decode_case(
         max_context_len=max_context_len,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=backend)
+    ):
         _init_cuda_graph_capture_metadata(backend, capture_batch_size, capture_batch)
         # Capture forward is a JIT warmup that mirrors production: the
         # captured CUDA graph records kernel launches against buffers
@@ -711,7 +716,7 @@ def run_lightning_cuda_graph_decode_case(
 ):
     """Lightning (Bailing seg_la) CUDA-graph decode replay. Mirrors GDN/KDA;
     Lightning uses `LightningAttentionBackend` (installed directly via
-    ForwardContext rather than through `HybridLinearAttnBackend`), but the
+    AttnForwardContext rather than through `HybridLinearAttnBackend`), but the
     capture/replay contract is the same shape because the backend also
     inherits from `MambaAttnBackendBase`. Loose tolerance to absorb seg_la
     Triton kernel CG-replay drift; eager tolerance preserved for non-graph
@@ -809,7 +814,9 @@ def _run_dsa_sparse_eager_for_cg(fixture):
     `run_dsa_sparse_fixture_eager` has its own context but takes an
     extra `testcase` arg for `skipTest`, which doesn't fit the
     adapter's `run_eager(fixture)` signature)."""
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         return run_dsa_sparse_forward(
             fixture, fixture.forward_batch, dsa_sparse_fixture_inputs(fixture)

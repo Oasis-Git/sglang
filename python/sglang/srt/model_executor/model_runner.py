@@ -91,9 +91,9 @@ from sglang.srt.model_executor.forward_batch_info import (
     PPProxyTensors,
 )
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    forward_context,
-    has_forward_context,
+    AttnForwardContext,
+    attn_forward_context,
+    has_attn_forward_context,
 )
 from sglang.srt.model_executor.model_runner_components import misc_utils
 from sglang.srt.model_executor.model_runner_components.attention_backend_setup import (
@@ -1289,10 +1289,12 @@ class ModelRunner:
         reinit_attn_backend: bool = False,
         split_forward_count: int = 1,
     ) -> ModelRunnerOutput:
-        if has_forward_context():
+        if has_attn_forward_context():
             ctx_mgr = contextlib.nullcontext()
         else:
-            ctx_mgr = forward_context(ForwardContext(attn_backend=self.attn_backend))
+            ctx_mgr = attn_forward_context(
+                AttnForwardContext(attn_backend=self.attn_backend)
+            )
         with ctx_mgr:
             mode_check = (
                 forward_batch.forward_mode.is_cpu_graph

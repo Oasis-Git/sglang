@@ -149,8 +149,10 @@ from sglang.srt.model_executor.runner_backend_utils.breakable_cuda_graph.context
     is_in_breakable_cuda_graph,
 )
 from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
-    get_tc_piecewise_forward_context,
     is_in_tc_piecewise_cuda_graph,
+)
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    get_forward_context,
 )
 from sglang.srt.models.deepseek_common.attention_backend_handler import (
     AttentionBackendRegistry,
@@ -2983,7 +2985,7 @@ def dsv2_flashinfer_moe_dual_stream_graph(
     fuse_mlp_allreduce: bool,
     mlp_reduce_scatter: bool,
 ) -> torch.Tensor:
-    forward_context = get_tc_piecewise_forward_context()
+    forward_context = get_forward_context()
     assert forward_context is not None
     assert forward_context.moe_fusions is not None
 

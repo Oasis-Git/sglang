@@ -34,8 +34,10 @@ from sglang.srt.model_executor.runner_backend_utils.breakable_cuda_graph.context
     is_in_breakable_cuda_graph,
 )
 from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
-    get_tc_piecewise_forward_context,
     is_in_tc_piecewise_cuda_graph,
+)
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    get_forward_context,
 )
 from sglang.srt.runtime_context import get_parallel, get_server_args
 from sglang.srt.state_capturer.indexer_topk import (
@@ -1750,7 +1752,7 @@ class Indexer(MultiPlatformOp):
         )
 
         # In piecewise/breakable CUDA graph mode, metadata is fetched inside
-        # custom ops via get_tc_piecewise_forward_context() to prevent Dynamo
+        # custom ops via get_forward_context() to prevent Dynamo
         # from guarding on forward_metadata identity, which changes each replay
         # when init_forward_metadata creates a new ForwardMetadata object.
         if not in_piecewise_or_breakable_cuda_graph:
@@ -2421,7 +2423,7 @@ def pcg_dsa_indexer_prefill_split(
     assert _is_cuda, "Internal error: DSA graph dispatch is only supported on CUDA"
     from sglang.kernels.ops.attention.dsa.triton_kernel import act_quant
 
-    forward_context = get_tc_piecewise_forward_context()
+    forward_context = get_forward_context()
     forward_batch = forward_context.forward_batch
     indexer = forward_context.dsa_indexers[layer_id]
     metadata = get_attn_backend().get_indexer_metadata(layer_id, forward_batch)

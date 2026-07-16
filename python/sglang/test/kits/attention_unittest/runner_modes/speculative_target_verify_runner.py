@@ -4,7 +4,10 @@ from typing import Literal
 import torch
 
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.speculative.dflash_info import DFlashVerifyInput
 from sglang.srt.speculative.eagle_info import EagleVerifyInput
 from sglang.srt.speculative.frozen_kv_mtp_info import FrozenKVMTPVerifyInput
@@ -580,7 +583,9 @@ def run_dense_spec_verify_case(
         masks_by_req,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_dense_forward(fixture, fixture.forward_batch, inputs)
 
@@ -693,7 +698,9 @@ def run_gdn_eagle_verify_case(
         topk=topk,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_gdn_forward(fixture, fixture.forward_batch, inputs)
 
@@ -828,7 +835,9 @@ def run_mla_eagle_verify_case(
         masks_by_req,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_mla_forward(fixture, fixture.forward_batch, inputs)
 
@@ -1036,7 +1045,9 @@ def run_kda_eagle_verify_case(
         topk=topk,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_kda_forward(fixture, fixture.forward_batch, inputs)
 
@@ -1168,7 +1179,9 @@ def run_lightning_eagle_verify_case(
         topk=topk,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_lightning_forward(fixture, fixture.forward_batch, inputs)
 
@@ -1305,7 +1318,9 @@ def run_mamba2_eagle_verify_case(
         topk=topk,
     )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = run_mamba2_forward(fixture, fixture.forward_batch, inputs)
 

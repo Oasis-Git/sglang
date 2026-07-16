@@ -34,7 +34,10 @@ from sglang.srt.model_executor.cuda_graph_config import (
     PhaseConfig,
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.runtime_context import get_context, get_parallel
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
 
@@ -528,11 +531,11 @@ class ProjectedDSV4Attention(nn.Module):
         it through `lm_head`.
         """
         from sglang.srt.model_executor.forward_context import (
-            get_forward_context,
+            get_attn_forward_context,
         )
 
         q, k = self.project(hidden_states)
-        ctx = get_forward_context()
+        ctx = get_attn_forward_context()
         attn_backend = ctx.attn_backend
         if forward_batch.out_cache_loc is not None:
             # `quant_to_nope_fp8_rope_bf16_pack_triton` expects 2D
@@ -876,7 +879,9 @@ def run_dsv4_attention_case(
     # Project Q for the input tokens only.
     q_input, _ = fixture.actual_module.project(fixture.input_hidden)
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = fixture.backend.forward(
             q=q_input,
@@ -1133,7 +1138,9 @@ def run_dsv4_fixture_eager(fixture: DSV4AttentionFixture) -> torch.Tensor:
     if case.compress_ratio in (4, 128):
         _populate_extra_kv_cache(fixture, layer_id=0, num_entries=_DSV4_EXTRA_ENTRIES)
     q_input, _ = fixture.actual_module.project(fixture.input_hidden)
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         _seed_c4_if_needed(fixture)
         actual = fixture.backend.forward(
@@ -1164,7 +1171,9 @@ def run_dsv4_forward(
     """
     case = fixture.case
     q_input, _ = fixture.actual_module.project(inputs["input_hidden"])
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         _seed_c4_if_needed(fixture)
         out = fixture.backend.forward(
             q=q_input,
@@ -1505,7 +1514,9 @@ def run_dsv4_target_verify_attention_case(
     )
 
     q_input, _ = fixture.actual_module.project(fixture.input_hidden)
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         _seed_c4_if_needed(fixture)
         actual = fixture.backend.forward(
@@ -1575,7 +1586,9 @@ def run_dsv4_draft_extend_attention_case(
         fixture.forward_batch.spec_info.seq_lens_cpu = None
 
     q_input, _ = fixture.actual_module.project(fixture.input_hidden)
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         actual = fixture.backend.forward(
             q=q_input,
@@ -1644,7 +1657,7 @@ def run_dsv4_compress_attention_case(
     q_input, _ = fixture.actual_module.project(fixture.input_hidden)
     with (
         torch.no_grad(),
-        forward_context(ForwardContext(attn_backend=fixture.backend)),
+        attn_forward_context(AttnForwardContext(attn_backend=fixture.backend)),
         envs.SGLANG_OPT_FLASHMLA_SPARSE_PREFILL.override(sparse_prefill),
     ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)

@@ -3,7 +3,10 @@ from typing import Any, Callable, Literal, Optional
 
 import torch
 
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 
 from .cuda_graph_decode_runner import (
     _init_cuda_graph_capture_metadata,
@@ -192,7 +195,9 @@ def run_speculative_cuda_graph_case(
             graph_initial_state,
         )
 
-        with torch.no_grad(), forward_context(ForwardContext(attn_backend=backend)):
+        with torch.no_grad(), attn_forward_context(
+            AttnForwardContext(attn_backend=backend)
+        ):
             backend.init_forward_metadata(graph_batch)
             graph_eager_actual = adapter.run_forward(
                 graph_fixture,
@@ -234,7 +239,9 @@ def run_speculative_cuda_graph_case(
         capture_inputs,
         max_context_len=max_context_len,
     )
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=backend)
+    ):
         _init_cuda_graph_capture_metadata(backend, capture_batch_size, capture_batch)
         # Capture forward is a JIT warmup that mirrors production: the
         # captured CUDA graph records kernel launches against buffers
@@ -309,7 +316,9 @@ def run_speculative_cuda_graph_case(
             num_tokens_per_req=adapter.pad_num_tokens_per_req,
         )
 
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=backend)
+    ):
         _init_cuda_graph_replay_metadata(backend, capture_batch_size, replay_batch)
         replay_actual = adapter.run_forward(
             graph_fixture,

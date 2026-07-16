@@ -21,8 +21,8 @@ from sglang.srt.layers.radix_attention import RadixAttention
 from sglang.srt.mem_cache.memory_pool import MLATokenToKVPool
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    set_forward_context,
+    AttnForwardContext,
+    set_attn_forward_context,
 )
 from sglang.srt.server_args import (
     ServerArgs,
@@ -440,7 +440,7 @@ class TestTRTLLMMLA(CustomTestCase):
             seq_lens_cpu=seq_lens.cpu(),
         )
         # Publish backend for RadixAttention dispatch.
-        set_forward_context(ForwardContext(attn_backend=backend))
+        set_attn_forward_context(AttnForwardContext(attn_backend=backend))
 
         # Add position information for RoPE
         fb.positions = torch.arange(batch_size, device=config["device"])
@@ -1171,7 +1171,7 @@ class TestTRTLLMMLA(CustomTestCase):
                         mha_return_lse=False,
                     )
                     # Publish backend for RadixAttention dispatch.
-                    set_forward_context(ForwardContext(attn_backend=backend))
+                    set_attn_forward_context(AttnForwardContext(attn_backend=backend))
 
                     # Add position information for RoPE
                     fb.positions = torch.arange(batch_size, device=config["device"])

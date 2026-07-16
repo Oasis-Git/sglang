@@ -40,7 +40,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardBatch,
     ForwardMode,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.pool_configurator import MemoryPoolConfig
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.base_spec_worker import EagleDraftWorkerBase
@@ -519,7 +522,9 @@ class FrozenKVMTPDraftWorker(EagleDraftWorkerBase, TpModelWorker):
 
         with (
             self._target_kv_pool_view(forward_batch),
-            forward_context(ForwardContext(attn_backend=self.draft_attn_backend)),
+            attn_forward_context(
+                AttnForwardContext(attn_backend=self.draft_attn_backend)
+            ),
         ):
             seed_output = self.draft_model_runner.forward(forward_batch).logits_output
 
@@ -562,7 +567,9 @@ class FrozenKVMTPDraftWorker(EagleDraftWorkerBase, TpModelWorker):
 
             with (
                 self._target_kv_pool_view(forward_batch),
-                forward_context(ForwardContext(attn_backend=self.draft_attn_backend)),
+                attn_forward_context(
+                    AttnForwardContext(attn_backend=self.draft_attn_backend)
+                ),
             ):
                 logits_output = self.draft_model_runner.forward(
                     forward_batch

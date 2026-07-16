@@ -47,8 +47,8 @@ from sglang.srt.model_executor.forward_batch_info import (  # noqa: E402
     ForwardMode,
 )
 from sglang.srt.model_executor.forward_context import (  # noqa: E402
-    ForwardContext,
-    forward_context,
+    AttnForwardContext,
+    attn_forward_context,
 )
 from sglang.srt.model_executor.model_runner import ModelRunner  # noqa: E402
 
@@ -835,7 +835,9 @@ def _pure_torch_mamba2_reference(
 
 
 def run_mamba2_fixture_eager(fixture: Mamba2AttentionFixture) -> torch.Tensor:
-    with torch.no_grad(), forward_context(ForwardContext(attn_backend=fixture.backend)):
+    with torch.no_grad(), attn_forward_context(
+        AttnForwardContext(attn_backend=fixture.backend)
+    ):
         fixture.backend.init_forward_metadata(fixture.forward_batch)
         return fixture.actual_module(fixture.forward_batch, fixture.hidden_states)
 

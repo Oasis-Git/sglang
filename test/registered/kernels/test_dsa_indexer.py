@@ -391,16 +391,16 @@ class TestDSAIndexer(CustomTestCase):
                 seq_lens_cpu=torch.tensor([total_len] * batch_size, device="cpu"),
             )
 
-        # Pool refs + attn_backend are now resolved via the ForwardContext;
+        # Pool refs + attn_backend are now resolved via the AttnForwardContext;
         # publish ``self.backend`` for the duration of this fixture call so
         # ``get_attn_backend()`` / ``get_token_to_kv_pool()`` /
         # ``get_req_to_token_pool()`` resolve correctly.
         from sglang.srt.model_executor.forward_context import (
-            ForwardContext,
-            set_forward_context,
+            AttnForwardContext,
+            set_attn_forward_context,
         )
 
-        set_forward_context(ForwardContext(attn_backend=self.backend))
+        set_attn_forward_context(AttnForwardContext(attn_backend=self.backend))
 
         # Mock write to req_to_token_pool
         page_size = self.model_runner.page_size

@@ -18,7 +18,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     ForwardBatch,
     ForwardMode,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.input_buffers import ForwardInputBuffers
 from sglang.srt.model_executor.runner import (
     DecodeCudaGraphRunner,
@@ -450,8 +453,8 @@ class EAGLEDraftExtendCudaGraphRunner(DecodeCudaGraphRunner):
             forward_batch.spec_info.hidden_states = hidden_states_backup
             return ret
 
-        with forward_context(
-            ForwardContext(attn_backend=self.draft_extend_attn_backend)
+        with attn_forward_context(
+            AttnForwardContext(attn_backend=self.draft_extend_attn_backend)
         ):
             self.draft_extend_attn_backend.init_forward_metadata_out_graph(
                 forward_batch, in_capture=True

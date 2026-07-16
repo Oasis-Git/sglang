@@ -12,8 +12,8 @@ from sglang.srt.layers.radix_attention import RadixAttention
 from sglang.srt.mem_cache.memory_pool import MHATokenToKVPool
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_executor.forward_context import (
-    ForwardContext,
-    set_forward_context,
+    AttnForwardContext,
+    set_attn_forward_context,
 )
 from sglang.test.test_utils import CustomTestCase
 
@@ -116,7 +116,7 @@ class TestFlashAttentionBackend(CustomTestCase):
         self.model_runner.model_config.num_attention_heads = self.num_heads
         # Publish the backend for any RadixAttention.forward path the tests
         # exercise; tearDown is unnecessary here since each test re-inits.
-        set_forward_context(ForwardContext(attn_backend=self.backend))
+        set_attn_forward_context(AttnForwardContext(attn_backend=self.backend))
 
     def _mock_write_to_req_to_token_pool(self, batch_size, seq_len, page_size):
         # if page_size > 1, the token pool stores the index to the page.
@@ -278,7 +278,7 @@ class TestFlashAttentionBackend(CustomTestCase):
                 seq_lens_cpu=torch.tensor([total_len] * self.batch_size, device="cpu"),
             )
 
-        # Pool refs are resolved via the active ForwardContext (published in
+        # Pool refs are resolved via the active AttnForwardContext (published in
         # setUp). Write the test fixture's req_to_token mapping.
         self._mock_write_to_req_to_token_pool(self.batch_size, total_len, page_size)
 

@@ -64,7 +64,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     compute_local_num_token_non_padded,
     enable_num_token_non_padded,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.runner.base_cuda_graph_runner import (
     BaseCudaGraphRunner,
     freeze_gc,
@@ -87,10 +90,12 @@ from sglang.srt.model_executor.runner_backend_utils.breakable_cuda_graph.context
 )
 from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
     TCPCG_FAILURE_HINT,
-    set_tc_piecewise_forward_context,
 )
 from sglang.srt.model_executor.runner_utils.buffers import (
     PrefillInputBuffers,
+)
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    set_forward_context,
 )
 from sglang.srt.runtime_context import get_parallel
 from sglang.srt.speculative.eagle_utils import get_draft_input_from_target_hidden_dim
@@ -455,7 +460,7 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
 
     @torch.no_grad()
     def _run_forward(self, forward_batch: ForwardBatch, num_tokens: int):
-        """Run forward inside the prefill set_tc_piecewise_forward_context.
+        """Run forward inside the prefill set_forward_context.
 
         BCG path: captures only the inner layer_model.forward (transformer
         stack), excluding the outer model.forward tail (logits_processor /
@@ -482,10 +487,10 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
         set_is_extend_in_batch(False)
 
         with (
-            forward_context(
-                ForwardContext(attn_backend=self.model_runner.attn_backend)
+            attn_forward_context(
+                AttnForwardContext(attn_backend=self.model_runner.attn_backend)
             ),
-            set_tc_piecewise_forward_context(
+            set_forward_context(
                 forward_batch,
                 self.attention_layers,
                 self.quant_config,
@@ -1095,10 +1100,12 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 tail_batch = forward_batch if full_path else static_forward_batch
                 try:
                     with (
-                        forward_context(
-                            ForwardContext(attn_backend=self.model_runner.attn_backend)
+                        attn_forward_context(
+                            AttnForwardContext(
+                                attn_backend=self.model_runner.attn_backend
+                            )
                         ),
-                        set_tc_piecewise_forward_context(
+                        set_forward_context(
                             static_forward_batch,
                             self.attention_layers,
                             self.quant_config,
@@ -1123,10 +1130,10 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 # multi-req via bs-invariant FX-traced kernels). Full/BCG use
                 # the captured-body path above; only tc_piecewise reaches here.
                 with (
-                    forward_context(
-                        ForwardContext(attn_backend=self.model_runner.attn_backend)
+                    attn_forward_context(
+                        AttnForwardContext(attn_backend=self.model_runner.attn_backend)
                     ),
-                    set_tc_piecewise_forward_context(
+                    set_forward_context(
                         static_forward_batch,
                         self.attention_layers,
                         self.quant_config,

@@ -63,7 +63,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     compute_local_num_token_non_padded,
     enable_num_token_non_padded,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.runner.base_cuda_graph_runner import (
     BaseCudaGraphRunner,
     freeze_gc,
@@ -929,9 +932,9 @@ class DecodeCudaGraphRunner(BaseCudaGraphRunner):
         )
 
         # All setup hooks below read get_attn_backend() (TboForwardBatchPreparer,
-        # DeepEP adapter, …) so they must run inside the same ForwardContext
+        # DeepEP adapter, …) so they must run inside the same AttnForwardContext
         # that wraps the warmup/capture forward.
-        with forward_context(ForwardContext(attn_backend=attn_backend)):
+        with attn_forward_context(AttnForwardContext(attn_backend=attn_backend)):
             self.tbo_plugin.capture_one_batch_size(forward_batch, num_tokens=num_tokens)
 
             if forward_batch.lora_ids is not None:

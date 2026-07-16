@@ -39,7 +39,10 @@ from sglang.srt.model_executor.forward_batch_info import (
     NgramEmbeddingInfo,
     PPProxyTensors,
 )
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.runner.flashinfer_autotune import (
     run_flashinfer_autotune_forward,
     should_run_flashinfer_autotune,
@@ -582,7 +585,7 @@ class BaseRunner(ABC):
 
         torch.get_device_module(mr.device).synchronize()
         mr.tp_group.barrier()
-        with forward_context(ForwardContext(attn_backend=mr.attn_backend)):
+        with attn_forward_context(AttnForwardContext(attn_backend=mr.attn_backend)):
             with torch.inference_mode(), run_ctx or empty_context():
                 run_once()
 

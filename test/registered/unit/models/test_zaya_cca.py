@@ -186,20 +186,20 @@ class _MockShortConvBackend:
 
 @contextmanager
 def _mock_pool_context(pool: _MockReqToTokenPool):
-    """Install a mock ``ForwardContext`` whose ``attn_backend`` exposes both
+    """Install a mock ``AttnForwardContext`` whose ``attn_backend`` exposes both
     ``req_to_token_pool`` and ``conv_state_metadata`` over ``pool``."""
     from sglang.srt.model_executor.forward_context import (
-        ForwardContext,
-        set_forward_context,
+        AttnForwardContext,
+        set_attn_forward_context,
     )
 
     backend = _MockShortConvBackend(pool)
-    ctx = ForwardContext(attn_backend=backend)
-    prev = set_forward_context(ctx)
+    ctx = AttnForwardContext(attn_backend=backend)
+    prev = set_attn_forward_context(ctx)
     try:
         yield backend
     finally:
-        set_forward_context(prev)
+        set_attn_forward_context(prev)
 
 
 # ---------------------------------------------------------------------------

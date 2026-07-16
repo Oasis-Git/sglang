@@ -16,14 +16,14 @@ from typing import (
 
 from sglang.srt.layers.dp_attention import set_dp_buffer_len
 from sglang.srt.model_executor.forward_context import (
-    forward_context,
-    get_forward_context,
+    attn_forward_context,
+    get_attn_forward_context,
 )
 from sglang.srt.utils.nvtx_utils import operations_nvtx_range
 
 if TYPE_CHECKING:
     from sglang.srt.model_executor.forward_batch_info import ForwardBatch
-    from sglang.srt.model_executor.forward_context import ForwardContext
+    from sglang.srt.model_executor.forward_context import AttnForwardContext
 
 
 def execute_operations(inputs, operations):
@@ -79,7 +79,7 @@ def _resolve_tbo_child_contexts():
     # Lazy import to avoid circular dependency at module load time.
     from sglang.srt.layers.attention.tbo_backend import TboAttnBackend
 
-    ctx = get_forward_context()
+    ctx = get_attn_forward_context()
     backend = ctx.attn_backend
     if not isinstance(backend, TboAttnBackend):
         return None, None
@@ -110,14 +110,14 @@ class _StageExecutor:
         debug_name: str,
         stages: List[Stage],
         inputs: dict,
-        child_ctx: Optional[ForwardContext] = None,
+        child_ctx: Optional[AttnForwardContext] = None,
     ):
         self._debug_name = debug_name
         self._stages = stages
         self._index = 0
         self._stage_state = _StateDict()
         self._stage_output = inputs
-        # When set, every next() runs inside this ForwardContext so that
+        # When set, every next() runs inside this AttnForwardContext so that
         # get_attn_backend() inside RadixAttention.forward resolves to the
         # per-child backend (with sub-batch metadata) instead of the TBO
         # parent's primary.
@@ -146,7 +146,7 @@ class _StageExecutor:
         )
 
         ctx_mgr = (
-            forward_context(self._child_ctx)
+            attn_forward_context(self._child_ctx)
             if self._child_ctx is not None
             else nullcontext()
         )

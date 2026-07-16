@@ -37,7 +37,10 @@ from sglang.srt.model_executor.cuda_graph_config import (
     check_cuda_graph_backend,
 )
 from sglang.srt.model_executor.forward_batch_info import CaptureHiddenMode, ForwardBatch
-from sglang.srt.model_executor.forward_context import ForwardContext, forward_context
+from sglang.srt.model_executor.forward_context import (
+    AttnForwardContext,
+    attn_forward_context,
+)
 from sglang.srt.model_executor.runner import (
     DecodeCudaGraphRunner,
     get_batch_sizes_to_capture,
@@ -616,7 +619,7 @@ class EagleDraftWorker(EagleDraftWorkerBase):
             forward_batch.out_cache_loc = out_cache_loc[i]
             spec_info.hidden_states = hidden_states
 
-            # Run forward under a per-step ForwardContext so the model layer
+            # Run forward under a per-step AttnForwardContext so the model layer
             # reads attn_backends[i] for the i-th draft step, plus a canary
             # index context so canary tracks which draft step is active.
             canary_index_ctx = (
@@ -625,8 +628,8 @@ class EagleDraftWorker(EagleDraftWorkerBase):
                 else contextlib.nullcontext()
             )
             with (
-                forward_context(
-                    ForwardContext(
+                attn_forward_context(
+                    AttnForwardContext(
                         attn_backend=self.draft_attn_backend.attn_backends[i]
                     )
                 ),

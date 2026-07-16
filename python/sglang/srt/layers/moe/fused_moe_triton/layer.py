@@ -66,8 +66,10 @@ from sglang.srt.layers.quantization.fp8_utils import quantize_block_fp8_weight_t
 from sglang.srt.layers.quantization.modelopt_quant import ModelOptNvFp4FusedMoEMethod
 from sglang.srt.layers.quantization.unquant import UnquantizedFusedMoEMethod
 from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph import (
-    get_tc_piecewise_forward_context,
     is_in_tc_piecewise_cuda_graph,
+)
+from sglang.srt.model_executor.runner_utils.forward_context import (
+    get_forward_context,
 )
 from sglang.srt.model_loader.weight_utils import narrow_padded_param_and_loaded_weight
 from sglang.srt.runtime_context import get_parallel, get_server_args
@@ -1474,7 +1476,7 @@ def moe_forward_piecewise_cuda_graph_impl(
     topk_output = StandardTopKOutput(
         topk_weights=topk_weights, topk_ids=topk_ids, router_logits=router_logits
     )
-    forward_context = get_tc_piecewise_forward_context()
+    forward_context = get_forward_context()
     moe_layer = forward_context.moe_layers[layer_id]
     return moe_layer.forward_impl(hidden_states, topk_output)
 
@@ -1503,6 +1505,6 @@ def fused_moe_bypassed_piecewise_cuda_graph_impl(
             allow_routed_experts_capture=allow_routed_experts_capture,
         ),
     )
-    forward_context = get_tc_piecewise_forward_context()
+    forward_context = get_forward_context()
     moe_layer = forward_context.moe_layers[layer_id]
     return moe_layer.forward_impl(hidden_states, topk_output)

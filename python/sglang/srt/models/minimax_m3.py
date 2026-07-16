@@ -71,8 +71,8 @@ from sglang.srt.model_executor.cuda_graph_config import (
 )
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_executor.forward_context import (
-    get_forward_context,
-    has_forward_context,
+    get_attn_forward_context,
+    has_attn_forward_context,
 )
 from sglang.srt.model_loader.weight_utils import (
     default_weight_loader,
@@ -930,9 +930,9 @@ class MiniMaxM3Attention(nn.Module):
 
     @staticmethod
     def _get_sparse_kv_pool():
-        if not has_forward_context():
+        if not has_attn_forward_context():
             return None
-        attn_backend = get_forward_context().attn_backend
+        attn_backend = get_attn_forward_context().attn_backend
         sparse_backend = getattr(attn_backend, "sparse", None)
         return getattr(sparse_backend, "kv_pool", None)
 

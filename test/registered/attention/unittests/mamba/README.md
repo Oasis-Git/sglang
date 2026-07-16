@@ -2,7 +2,7 @@
 
 This folder covers Mamba2 state-space-model attention. The actual path
 constructs a real `MambaMixer2` and drives it through `Mamba2AttnBackend` via
-`ForwardContext`. Expected outputs come from a pure-PyTorch per-token SSM scan
+`AttnForwardContext`. Expected outputs come from a pure-PyTorch per-token SSM scan
 reference (`state_t = exp(A*dt_t) * state_{t-1} + dt_t * B_t * x_t`,
 `y_t = C_t * state_t + D * x_t`) that reuses the actual `in_proj` / `conv1d` /
 `norm` / `out_proj` modules through shared random weights but recomputes the
@@ -113,7 +113,7 @@ call.
 - Wire the `HybridLinearAttnBackend` dispatch wrapper into the fixture so
   production `init_forward_metadata*` paths and per-layer dispatch are
   actually exercised (today the fixture installs `Mamba2AttnBackend`
-  directly via `ForwardContext`).
+  directly via `AttnForwardContext`).
 - Add a CUDA graph decode fixture with explicit recurrent cache snapshot /
   restore between capture and replay, matching the GDN runner-mode shape.
 

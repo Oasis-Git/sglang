@@ -2,7 +2,7 @@
 
 This folder covers Bailing-style segmented linear attention (`seg_la`). The
 actual path wraps `RadixAttention` and installs `LightningAttentionBackend`
-directly via `ForwardContext`, since Lightning's layer wrapper is plain
+directly via `AttnForwardContext`, since Lightning's layer wrapper is plain
 `RadixAttention` and `HybridLinearAttnBackend` would route it to the full
 backend. Expected outputs come from an independent pure-PyTorch per-token
 `seg_la` recurrence reference (`state_t = state_{t-1} * exp(-slope_h) +
