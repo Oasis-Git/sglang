@@ -54,6 +54,37 @@
   "integration": "Keep PR41657 fused BF16 Q-RoPE path and retain PR41603 q_rope_store only for FP8 outputs.",
   "runtime_optimizations": [
     {
+      "name": "Bound DSV4.1 prefill sparse-indexer metadata pairing scans",
+      "source_branch": "perf/dsv41-indexer-pair-schedule",
+      "source_commit": "c4be1072d889b0a5961e8ddfc4f574e91e881a7e",
+      "source_base": "5781206833d3296f6dc6846a9eb1ac9eab0cd522",
+      "source_base_ref": "Oasis-Git/main",
+      "lab_parent": "456b20d79f",
+      "lab_commit": "39ed8ce0682bcb53b66b8ec2e1ccd42880e80106",
+      "integration_adjustments": "None; clean cherry-pick. Prefill only, when a request has more than 1024 query rows. Original request IDs remain stored for tail rebuilding; only DeepGEMM schedule grouping receives bounded pair IDs. Decode, verification and score tiling unchanged.",
+      "validation": {
+        "isolated_gpu": "Nine exact-logit comparisons passed, including long/odd-length and empty-request segments, with distinct KV pages per request.",
+        "metadata_16k_ms": {"before": 11.05952, "after_including_pair_ids": 0.452144},
+        "microbenchmark_caveat": "Synthetic 2048 candidate blocks, 100000 context, GB300. Not an end-to-end speedup.",
+        "full_model_fix_only": {
+          "status": "Passed matched request replay and four-rank PyTorch trace. Not lab-stack validation or a model-quality evaluation.",
+          "base_commit": "3c4653b6a30cba798448f7fc34ad9a92a7f8e68b",
+          "hardware": "Same replacement 4xGB300 node before and after",
+          "controls": "Identical launch args/env, TP4/EP1, DSPARK block 5 and simulated acceptance 5.4, chunk 16384, HuggingFace tokenizer. Only sparse_table.py patched. Three measured repeats; warmup excluded.",
+          "input_tokens": 165893,
+          "cached_tokens": 88320,
+          "output_tokens": 6374,
+          "input_sha256": "debc83692ef4175fbd3929829fb440ab62a30321f711782c21dccc1ea2399c0d",
+          "median_ttft_ms": {"before": 1471.654010, "after": 1415.623290},
+          "median_e2e_ms": {"before": 10994.380813, "after": 10820.506225},
+          "metadata_kernel_ms_median_rank_sum": {"before": 56.284274, "after": 1.556886},
+          "metadata_kernel_calls_per_rank": 6,
+          "caveat": "Kernel sums are not additive critical-path time. Decode code unchanged; do not attribute generation-time variation to this prefill-only patch. No TRT or fastokens patch in this A/B."
+        },
+        "full_model_lab_stack": "Not run."
+      }
+    },
+    {
       "name": "fastokens serving with independent HuggingFace Engram tokenizer",
       "source_branch": "perf/dsv41-tokenizer-fastokens",
       "source_commit": "c61e671f8582231d0db13effacf7f6920cdd52a1",
