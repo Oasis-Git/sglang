@@ -1309,27 +1309,15 @@ class MQALayer(MqaAttentionBase):
         q, _ = self.wq_b(q)
         q = q.view(-1, self.n_local_heads, self.head_dim)
         if not self.q_head_norm:
-            if (
-                _is_cuda
-                and q_out is not None
-                and (
-                    0 < q.shape[0] <= 8
-                    or (
-                        self.is_dsv41
-                        and get_platform().is_blackwell
-                        and self.n_local_heads == 16
-                        and 4096 <= q.shape[0] <= 65536
-                    )
+            # TODO: enable zero-copy path to skip the extra no-rope copy overhead
+            if _is_cuda and q_out is not None:
+                fused_q_norm_rope(
+                    q,
+                    q_out,
+                    None,  # eps = None means no norm
+                    self.freqs_cis,
+                    positions,
                 )
-                and self.head_dim == 512
-                and self.qk_rope_head_dim == 64
-                and q.dtype == q_out.dtype == torch.bfloat16
-                and q.stride(1) == q_out.stride(1) == 512
-                and q.stride(2) == q_out.stride(2) == 1
-            ):
-                from sglang.kernels.ops.attention.dsv4.q_rope_store import q_rope_store
-
-                q_rope_store(q, q_out, self.freqs_cis, positions)
                 return q_out
             fused_rope_inplace(
                 q[..., -self.qk_rope_head_dim :],
@@ -3299,8 +3287,8 @@ class DeepseekV4DecoderLayer(nn.Module):
         ):
             # Fusing the split-K reduction with sinkhorn keeps it batch-invariant.
             main_stream = torch.cuda.current_stream()
-            if stats_stream is not None:
-                x.record_stream(stats_stream)
+            # x is not record_stream'ed: each stats consumer joins stats_stream on the
+            # main stream before x is freed, so x's block is reusable right at its free.
             with (
                 torch.cuda.stream(stats_stream)
                 if stats_stream is not None
