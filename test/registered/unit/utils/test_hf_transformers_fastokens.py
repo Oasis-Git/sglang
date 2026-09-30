@@ -3,6 +3,10 @@ backend of the loaded tokenizer with fastokens' _TokenizerShim.
 """
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from tokenizers import Tokenizer
 
 from sglang.test.ci.ci_register import register_cpu_ci
 from sglang.test.test_utils import (
@@ -25,6 +29,57 @@ except ImportError:
 
 @unittest.skipUnless(HAS_FASTOKENS, "fastokens package not installed")
 class TestFastokensBackend(CustomTestCase):
+    def test_dsv41_processor_forwards_tokenizer_backend(self):
+        from sglang.srt.utils.hf_transformers.processor import get_processor
+
+        module = "sglang.srt.utils.hf_transformers.processor"
+        for backend in ("huggingface", "fastokens"):
+            with (
+                self.subTest(backend=backend),
+                patch(
+                    f"{module}.AutoConfig.from_pretrained",
+                    return_value=SimpleNamespace(
+                        model_type="deepseek_v41", vision_n_layers=1
+                    ),
+                ),
+                patch(f"{module}.get_tokenizer") as load,
+            ):
+                self.assertIs(
+                    get_processor(
+                        "test-model",
+                        tokenizer_backend=backend,
+                        tokenizer_revision="test-revision",
+                    ),
+                    load.return_value,
+                )
+                load.assert_called_once_with(
+                    "test-model",
+                    tokenizer_mode="auto",
+                    trust_remote_code=False,
+                    revision="test-revision",
+                    tokenizer_backend=backend,
+                )
+
+    def test_huggingface_load_after_fastokens_preserves_vocab(self):
+        from fastokens._compat import _TokenizerShim
+
+        from sglang.srt.utils.hf_transformers.tokenizer import get_tokenizer
+
+        fast = get_tokenizer(TOKENIZER_MODEL, tokenizer_backend="fastokens")
+        reference = Tokenizer.from_str(fast.backend_tokenizer.to_str())
+        hf = get_tokenizer(TOKENIZER_MODEL, tokenizer_backend="huggingface")
+        self.assertIsInstance(hf.backend_tokenizer, Tokenizer)
+        self.assertEqual(len(hf), reference.get_vocab_size(with_added_tokens=True))
+        undefined_id = max(reference.get_vocab().values()) + 1
+        self.assertEqual(hf.backend_tokenizer.decode([undefined_id]), "")
+        for text in ("hello world", "unknown", ""):
+            self.assertEqual(hf.encode(text), reference.encode(text).ids)
+            self.assertEqual(fast.encode(text), hf.encode(text))
+        # Loading HF must not undo fastokens globally or alter existing instances.
+        fast_again = get_tokenizer(TOKENIZER_MODEL, tokenizer_backend="fastokens")
+        self.assertIsInstance(fast_again.backend_tokenizer, _TokenizerShim)
+        self.assertIsInstance(fast.backend_tokenizer, _TokenizerShim)
+
     def test_shim_is_applied(self):
         # `_TokenizerShim` is fastokens' private compat shim. SGLang's
         # integration relies on `tokenizer._tokenizer` being an instance of
