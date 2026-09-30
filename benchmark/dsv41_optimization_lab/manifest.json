@@ -1,0 +1,59 @@
+{
+  "purpose": "Local evolving test branch; do not merge or publish without explicit instruction.",
+  "branch": "perf/dsv41-optimization-lab",
+  "base_remote": "https://github.com/Oasis-Git/sglang.git",
+  "base_ref": "main",
+  "base_commit": "5781206833d3296f6dc6846a9eb1ac9eab0cd522",
+  "tested_stack_source_commit": "ca3e2120e0e5a9a6feb983956160fd7ade85661f",
+  "patches": [
+    {
+      "number": 41657,
+      "head": "d5e1678d382dbf9f9bda283abe41c1a67c790d3f",
+      "base": "05817a40c98a09021945f894b8200911df8e1ec6",
+      "commits": 1,
+      "url": "https://github.com/sgl-project/sglang/pull/41657",
+      "patch_base": "bd780950300a0c236509352bab44d8a8a98f36c2"
+    },
+    {
+      "number": 41658,
+      "head": "5679b92c5310508c6a6fac0e3b99050c1af1898c",
+      "base": "05817a40c98a09021945f894b8200911df8e1ec6",
+      "commits": 2,
+      "url": "https://github.com/sgl-project/sglang/pull/41658",
+      "patch_base": "bd780950300a0c236509352bab44d8a8a98f36c2"
+    },
+    {
+      "number": 41659,
+      "head": "fc2795bbb5aef65b451307a8f97a97c26cfec484",
+      "base": "05817a40c98a09021945f894b8200911df8e1ec6",
+      "commits": 6,
+      "url": "https://github.com/sgl-project/sglang/pull/41659",
+      "patch_base": "bd780950300a0c236509352bab44d8a8a98f36c2"
+    },
+    {
+      "number": 41660,
+      "head": "82f506027f142e1caadc59eb2de5613759fc2e50",
+      "base": "05817a40c98a09021945f894b8200911df8e1ec6",
+      "commits": 1,
+      "url": "https://github.com/sgl-project/sglang/pull/41660",
+      "patch_base": "bd780950300a0c236509352bab44d8a8a98f36c2"
+    },
+    {
+      "number": 41603,
+      "head": "60141feb3775735681d551c5f690d6ef93d957c2",
+      "url": "https://github.com/sgl-project/sglang/pull/41603",
+      "status": "Integrated; combined end-to-end GPU validation pending"
+    }
+  ],
+  "trtllm_launch_args": [
+    "--dsv4-attn-backend",
+    "trtllm",
+    "--cuda-graph-backend-prefill",
+    "disabled"
+  ],
+  "integration": "Keep PR41657 fused BF16 Q-RoPE path and retain PR41603 q_rope_store only for FP8 outputs.",
+  "validation": {
+    "gpu_q_rope": "3 tests passed on GB300: BF16 exact output/padding, BF16 graph replay, FP8 rounding/padding (10 shape/index-type subcases). New helper and tests loaded in isolation against the existing tested SGLang runtime.",
+    "full_model_combined_branch": "Not run; no end-to-end performance claim."
+  }
+}

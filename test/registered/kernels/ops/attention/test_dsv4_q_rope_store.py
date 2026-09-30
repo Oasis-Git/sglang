@@ -98,6 +98,37 @@ class TestQRopeStore(CustomTestCase):
     def test_graph_replay(self):
         self._check_graph_replay(6)
 
+    @unittest.skipIf(is_hip(), "TRT-LLM FP8 Q path is CUDA-only")
+    def test_trtllm_fp8_rounding_and_padding(self):
+        from sglang.kernels.ops.attention.dsv4.q_rope_store import q_rope_store
+
+        torch.manual_seed(911)
+        freqs = torch.polar(
+            torch.ones(8192, 32, device="cuda"), torch.randn(8192, 32, device="cuda")
+        )
+        for rows, heads in ((6, 8), (6, 16), (6, 32), (4097, 16), (8192, 16)):
+            for index_dtype in (torch.int32, torch.int64):
+                with self.subTest(rows=rows, heads=heads, index_dtype=index_dtype):
+                    q = torch.randn(
+                        rows, heads + 1, 512, device="cuda", dtype=torch.bfloat16
+                    )[:, :heads]
+                    original = q.clone()
+                    padding = torch.full(
+                        (rows, 64, 512), 7.0, device="cuda", dtype=torch.bfloat16
+                    ).to(torch.float8_e4m3fn)
+                    positions = torch.randint(
+                        0, 8192, (rows,), device="cuda", dtype=index_dtype
+                    )
+                    expected = q.clone()
+                    fused_rope_inplace(expected[..., 448:], None, freqs, positions)
+                    expected = expected.to(torch.float8_e4m3fn)
+                    q_rope_store(q, padding[:, :heads], freqs, positions)
+                    torch.testing.assert_close(
+                        padding[:, :heads].float(), expected.float(), rtol=0, atol=0
+                    )
+                    torch.testing.assert_close(q, original, rtol=0, atol=0)
+                    self.assertTrue((padding[:, heads:].float() == 7).all().item())
+
     def test_large_prefill_graph_replay(self):
         self._check_graph_replay(4097)
 
