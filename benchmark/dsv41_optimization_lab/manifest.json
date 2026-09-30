@@ -52,6 +52,49 @@
     "disabled"
   ],
   "integration": "Keep PR41657 fused BF16 Q-RoPE path and retain PR41603 q_rope_store only for FP8 outputs.",
+  "runtime_optimizations": [
+    {
+      "name": "fastokens serving with independent HuggingFace Engram tokenizer",
+      "source_branch": "perf/dsv41-tokenizer-fastokens",
+      "source_commit": "81204764c2d51b2604065768627261bc4904e763",
+      "source_base": "eb9c9ee99d47bf4c526a06cd84da59cd9cf4e2a5",
+      "lab_parent": "4a4095c6f15d8fa20e437da6defd8ac7df18b01b",
+      "lab_commit": "525bd9c9be23679a53356566809c02f13e939ea0",
+      "integration_adjustments": "None; cherry-picked with source provenance. No changes to Engram hashing or GPU kernels.",
+      "package": "fastokens==0.1.2",
+      "launch_args_append": ["--tokenizer-backend", "fastokens"],
+      "default_changed": false,
+      "validation": {
+        "regression_tests": "4 passed, including processor argument forwarding and HF backend isolation after fastokens activation.",
+        "prompt_parity": "185 texts: 370 exact encode checks, 370 exact decode checks, 2 batch checks passed.",
+        "engram_map_parity": {
+          "entries": 129280,
+          "compressed_vocab_size": 99092,
+          "sha256": "2d0b11863132145f6bd7d830dc39d681ef6b173becca1e05f5054c3e72e6b5a9"
+        },
+        "tokenizer_microbenchmark_ms": {"huggingface_approx": 615, "fastokens_approx": 41},
+        "full_model_fix_only": {
+          "status": "Passed; not a lab-stack performance measurement.",
+          "base_commit": "3c4653b6a30cba798448f7fc34ad9a92a7f8e68b",
+          "patch_commit": "81204764c2d51b2604065768627261bc4904e763",
+          "model_revision": "dba1be0a40aa45a94ad051997016db3960a90277",
+          "hardware": "4xGB300",
+          "bs": 1,
+          "measured_repeats": 3,
+          "warmup_repeats_excluded": 1,
+          "input_tokens": 337833,
+          "cached_tokens": 336128,
+          "output_tokens": 1362,
+          "input_sha256": "f9833d8b4040e71770333ff363cb979929b363c14660fa5cfa4f1a26eae653e8",
+          "median_ttft_ms": {"sglang_before": 890.196934, "sglang_after": 299.006265, "vllm_reference": 292.865838},
+          "median_e2e_ms": {"sglang_before": 2829.073450, "sglang_after": 2261.216421, "vllm_reference": 2033.456697},
+          "controls": "Same recovered chat, token hash, cache hits and output counts. SGLang C1 TP4/EP1 recipe, DSPARK block 5 with simulated acceptance 5.4, chunk 4096, prefill interval 0; ignore_eos=true in replay. Only this patch and fastokens==0.1.2/--tokenizer-backend fastokens added. Original AgentX runtime nonce omitted (11 fewer input tokens).",
+          "vllm_reference_commit": "ddd6fbca148a867aad1fcab7ec72f582b9977db4"
+        },
+        "full_model_lab_stack": "Not run."
+      }
+    }
+  ],
   "validation": {
     "gpu_q_rope": "3 tests passed on GB300: BF16 exact output/padding, BF16 graph replay, FP8 rounding/padding (10 shape/index-type subcases). New helper and tests loaded in isolation against the existing tested SGLang runtime.",
     "full_model_combined_branch": "Not run; no end-to-end performance claim."
