@@ -1,0 +1,144 @@
+{
+  "date_utc": "2026-09-30",
+  "base_commit": "b82ff1b9c7a8521a5a8d4ba5e44f39f3492c9cc0",
+  "branch": "perf/dsv41-optimization-lab",
+  "scope": "Opt-in lab experiment; FlashInfer 0.7.0; no CUDA kernel changes",
+  "enabled_env": {
+    "SGLANG_OPT_MXFP8_DISPATCH_CACHE": "1",
+    "SGLANG_FLASHINFER_POLICY_CACHE": "1"
+  },
+  "workload": {
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "gpu": "4 x GB300",
+    "tp": 4,
+    "ep": 4,
+    "input_tokens": 8192,
+    "output_tokens": 1,
+    "batch_size": 1,
+    "prefix_cache": "flushed before each request",
+    "speculation": false,
+    "overlap_scheduler": false,
+    "prefill_chunk_size": 16384,
+    "prefill_decode_interval": 4,
+    "attention": "TRTLLM",
+    "mega_mhc": true,
+    "flashinfer": "0.7.0",
+    "warmup_requests": 10,
+    "measured_requests": 20,
+    "prompt_sha256": "50e2f712c192fe3f11710b7ead7ffbcad468b03d1fa3c5597f193489ef48499c"
+  },
+  "runs": {
+    "baseline": {
+      "n": 20,
+      "median_ms": 182.25530100608012,
+      "min_ms": 180.7393890048843,
+      "max_ms": 207.23595800518524,
+      "mean_ms": 184.09731995197944
+    },
+    "candidate": {
+      "n": 20,
+      "median_ms": 169.2152414980228,
+      "min_ms": 166.90234800626058,
+      "max_ms": 190.04462599696126,
+      "mean_ms": 170.20453674995224
+    },
+    "control-cache-only": {
+      "n": 20,
+      "median_ms": 181.37465600011637,
+      "min_ms": 179.178676000447,
+      "max_ms": 195.81806799396873,
+      "mean_ms": 182.40657905189437
+    },
+    "candidate-confirm": {
+      "n": 20,
+      "median_ms": 172.67430100037018,
+      "min_ms": 170.4999039939139,
+      "max_ms": 176.13401700509712,
+      "mean_ms": 172.8943229012657
+    }
+  },
+  "paired_results": [
+    {
+      "control": "baseline",
+      "candidate": "candidate",
+      "saved_ms": 13.040059508057311,
+      "latency_reduction_percent": 7.154831401925743
+    },
+    {
+      "control": "control-cache-only",
+      "candidate": "candidate-confirm",
+      "saved_ms": 8.700354999746196,
+      "latency_reduction_percent": 4.796896761442025
+    }
+  ],
+  "correctness": {
+    "all_outputs": "Record",
+    "tactic_files_identical_all_ranks_all_runs": true,
+    "tactic_file_sha256": "53203b05188f65471d2b64f0e42dc12af243a4acd221b3abe1665f7b28f62c87",
+    "gemm_shapes_bitwise_equal": [
+      {
+        "m": 8192,
+        "k": 576,
+        "n": 5120,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 1280,
+        "n": 4096,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 1280,
+        "n": 8192,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 2048,
+        "n": 5120,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 5120,
+        "n": 1152,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 5120,
+        "n": 1792,
+        "bitwise_equal": true
+      },
+      {
+        "m": 8192,
+        "k": 6144,
+        "n": 25600,
+        "bitwise_equal": true
+      }
+    ],
+    "invalid_dtype_and_scale_metadata_rejected": true
+  },
+  "startup": {
+    "issue": "Persisted v1 tactics omit profiling policy, so cold-L2 autotune ignores entries treated as legacy hot-L2.",
+    "fix": "Persist policy sidecars bound to the exact tactic file; validate policy and rank agreement; restore the regular lookup after startup.",
+    "reused_profiles_per_rank": 162,
+    "retuned_profiles_in_candidate_and_control_restarts": 0,
+    "native_moe_ninja_dry_run": "no work to do",
+    "existing_cache_migration": "Only the 162 entries observed freshly retuned in this baseline were migrated; no policy was inferred for unknown old caches."
+  },
+  "prior_vllm_reference": {
+    "median_ms": 156.9820135,
+    "rerun_in_this_experiment": false,
+    "latest_sglang_gap_ms": 15.692287500370185,
+    "latest_sglang_gap_percent": 9.996232785210246
+  },
+  "limits": [
+    "One-token prefill benchmark; no new AgentX or speculative decoding result.",
+    "Two sequential fresh-process A/B pairs; startup-cache-only ablation included.",
+    "The post-profiler old process measured 211.7 ms and was excluded from speedup claims.",
+    "Initial wrapper integration failed before model loading; capability API preservation fixed before all successful candidate measurements."
+  ]
+}
