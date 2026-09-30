@@ -42,7 +42,7 @@
       "number": 41603,
       "head": "60141feb3775735681d551c5f690d6ef93d957c2",
       "url": "https://github.com/sgl-project/sglang/pull/41603",
-      "status": "Integrated; combined end-to-end GPU validation pending"
+      "status": "Integrated; 8K prefill serving tested with FlashInfer 0.7.0 runtime overlay"
     }
   ],
   "trtllm_launch_args": [
@@ -54,6 +54,35 @@
   "integration": "Keep PR41657 fused BF16 Q-RoPE path and retain PR41603 q_rope_store only for FP8 outputs.",
   "validation": {
     "gpu_q_rope": "3 tests passed on GB300: BF16 exact output/padding, BF16 graph replay, FP8 rounding/padding (10 shape/index-type subcases). New helper and tests loaded in isolation against the existing tested SGLang runtime.",
-    "full_model_combined_branch": "Not run; no end-to-end performance claim."
-  }
+    "full_model_combined_branch": "8K/1-output-token BS1 cold-cache serving and all-rank torch profile completed on 4xGB300. Not a model-quality or AgentX c64 validation."
+  },
+  "experiments": [
+    {
+      "name": "mega-mhc-prefill",
+      "base_commit": "4a4095c6f15d8fa20e437da6defd8ac7df18b01b",
+      "enable_env": "SGLANG_OPT_DSV41_MEGA_MHC_PREFILL=1",
+      "default_enabled": false,
+      "runtime": {
+        "flashinfer": "0.7.0",
+        "cutlass_dsl": "4.7.1",
+        "note": "Runtime overlay; this experiment does not change the dependency pins."
+      },
+      "http_median_ms": {
+        "baseline": 218.075955,
+        "candidate": 203.174061
+      },
+      "named_mhc_gpu_ms": {
+        "baseline": 19.832216,
+        "candidate": 13.131736
+      },
+      "validation": "Three chained-boundary numerical tests passed at 4K, 8K, 16K; same greedy output token in all 30 server requests; scoped pre-commit checks passed. Prefill trace confirms 77 Mega mHC calls per request.",
+      "engram_gpu_stage_ms": {
+        "host_gather": 0.229375,
+        "lookup_all_reduce": 0.630164,
+        "projection": 1.508726,
+        "gate": 0.405237
+      },
+      "limitations": "Test-only eager prefill path; no full quality, c64 AgentX, or complete CPU critical-path validation. Engram shared hash/history preparation is outside the stage annotations."
+    }
+  ]
 }

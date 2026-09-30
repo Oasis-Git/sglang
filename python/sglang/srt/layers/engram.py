@@ -146,6 +146,17 @@ def compute_hash_multipliers(
     return torch.stack(rows)
 
 
+def _engram_profile_range(name):
+    # Development instrumentation: no record_function overhead in timing runs.
+    from contextlib import nullcontext
+
+    return (
+        torch.profiler.record_function("engram::" + name)
+        if torch.autograd._profiler_enabled()
+        else nullcontext()
+    )
+
+
 class EngramLayout(msgspec.Struct, frozen=True):
     max_ngram_size: int
     layer_ids: tuple[int, ...]
@@ -779,9 +790,11 @@ class EngramEmbedding(nn.Module):
         per-rank host shards zero unowned rows and the all-reduce reassembles."""
         if indices.shape[0] == 0:
             return self._empty(indices)
-        values = self._owned_rows(indices)
+        with _engram_profile_range("host_gather"):
+            values = self._owned_rows(indices)
         if self.tp_size > 1:
-            values = tensor_model_parallel_all_reduce(values)
+            with _engram_profile_range("lookup_all_reduce"):
+                values = tensor_model_parallel_all_reduce(values)
         return values
 
     def _empty(self, indices: torch.Tensor) -> torch.Tensor:
@@ -920,12 +933,15 @@ class Engram(nn.Module):
         """x [T, hc_mult, dim]; hash_ids [T, n_hash_cols] for this layer."""
         # The lookup runs first even for an idle DP-attention batch: under DP
         # attention it is a collective every rank has to join.
-        emb = self.embed(hash_ids, forward_batch, cp_all_tokens=cp_all_tokens)
+        with _engram_profile_range("embedding"):
+            emb = self.embed(hash_ids, forward_batch, cp_all_tokens=cp_all_tokens)
         if x.shape[0] == 0:
             # Nothing to gate, and the MXFP8 quantize behind wkv rejects an
             # empty M.
             return x
-        kv, _ = self.wkv(emb.flatten(-2))
-        return engram_gate(
-            x, kv, self.q_weight, self.k_weight, self.eps, self.clamp_value
-        )
+        with _engram_profile_range("projection"):
+            kv, _ = self.wkv(emb.flatten(-2))
+        with _engram_profile_range("gate"):
+            return engram_gate(
+                x, kv, self.q_weight, self.k_weight, self.eps, self.clamp_value
+            )

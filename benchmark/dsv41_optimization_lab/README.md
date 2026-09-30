@@ -38,10 +38,9 @@ The combined branch retains that helper for FP8 only. BF16 Q continues through
 The regression test covers decode-sized and 8K prefill inputs, strided Q and
 padded output, both position integer widths, and exact reference equality.
 
-GPU unit checks do not validate the complete combined serving path. Full-model
-TRT-LLM correctness and performance on this branch must be established before
-claiming a speedup. Earlier measurements of the four-PR stack are not results
-for this five-PR integration.
+The combined TRT-LLM serving path has now completed the 8K prefill experiment
+below. This is a serving and kernel validation, not a model-quality evaluation.
+Earlier measurements of the four-PR stack are not results for this integration.
 
 ## Updating this branch
 
@@ -49,3 +48,45 @@ Append scoped optimization commits and update the manifest with exact source
 revisions and validation results. Keep baseline and candidate run configurations
 explicit. Preserve the local test-only status; do not merge into main or push
 this branch without the user's explicit instruction.
+
+## Opt-in Mega mHC prefill experiment
+
+Set `SGLANG_OPT_DSV41_MEGA_MHC_PREFILL=1` to fuse the residual update,
+shifted collapse/RMSNorm, and next-sublayer mixing statistics with DeepGEMM
+`mega_mhc`. The flag defaults off. This experiment requires an installed
+DeepGEMM exposing that entry point. It handles eager Blackwell DSv4.1 prefill
+with HC4, hidden size 5120, and 4K–64K rows. Decode/verify, CP/SP/DP-attention,
+prefill graphs, and late-layer tail selection keep the existing path.
+Engram boundaries invalidate the hand-off; DSPARK captures materialized residuals.
+
+On the same 4xGB300 node, BS1, 8192 identical input tokens, one output token,
+zero cached tokens, five warmups and ten timed requests:
+
+| Measurement | Baseline | Mega mHC |
+| --- | ---: | ---: |
+| Median HTTP latency | 218.08 ms | 203.17 ms |
+| Median engine prefill | 212.94 ms | 198.72 ms |
+| Matched named mHC GPU sum | 19.83 ms | 13.13 ms |
+| mHC kernel executions/request | 243 | 89 |
+| Non-collective prefill GPU sum | 95.73 ms | 89.00 ms |
+
+Both runtimes used the existing FlashInfer 0.7.0/Cutlass DSL 4.7.1 overlay,
+TRT-LLM Q16 attention, interval 4, and prefill graphs disabled. Dependency pins
+in this branch are unchanged by the mHC experiment. Kernel totals come from
+three profiled requests on each of four ranks; baseline kernels use the preceding
+FlashInfer-0.7 capture. Latency was measured separately before any profiler in
+each process. Kernel sums can overlap and are not critical-path wall time.
+
+The numerical test is
+`test/manual/kernels/attention/test_dsv41_mega_mhc_prefill.py` (run directly with
+Python). It checks two consecutive boundaries at 4K/8K/16K against the production
+decomposition. All three tests pass with BF16 atol=0.016/rtol=0.01 and FP32
+coefficient atol=0.00002/rtol=0.001. All 30 server requests return the same greedy
+output token. This does not substitute for a full quality evaluation.
+
+Development-only Engram annotations activate under torch profiling. Across the
+two Engram layers, the per-request GPU sums are 0.23 ms host gather, 0.63 ms
+lookup all-reduce (including waits), 1.51 ms projection, and 0.41 ms gate. The
+gather reads host memory directly on the GPU; no separate CPU lookup/H2D copy
+stage exists in this per-rank configuration. Shared hash/history preparation is
+not included in these four annotated stage groups.

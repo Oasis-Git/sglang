@@ -1554,6 +1554,8 @@ class Envs:
     SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT = EnvStr("shared")
 
     # Kernels and indexer
+    # Test-only eager DSv4.1 prefill boundary; keep decode/verify unchanged.
+    SGLANG_OPT_DSV41_MEGA_MHC_PREFILL = EnvBool(False)
     SGLANG_OPT_DEEPGEMM_HC_PRENORM = EnvBool(True)
     SGLANG_OPT_USE_TILELANG_MHC_PRE = EnvBool(True)
     SGLANG_OPT_USE_TILELANG_MHC_POST = EnvBool(True)
