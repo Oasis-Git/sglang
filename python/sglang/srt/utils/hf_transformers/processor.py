@@ -256,7 +256,11 @@ def get_processor(
         )
     if config.model_type == "deepseek_v41" and config.vision_n_layers > 0:
         return get_tokenizer(
-            tokenizer_name, trust_remote_code=trust_remote_code, revision=revision
+            tokenizer_name,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+            revision=revision,
+            tokenizer_backend=tokenizer_backend,
         )
     is_ocr2 = _is_deepseek_ocr2_model(config)
     if _is_deepseek_ocr_model(config) or is_ocr2:
