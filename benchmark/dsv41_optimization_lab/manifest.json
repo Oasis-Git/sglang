@@ -61,7 +61,7 @@
       "source_base_ref": "Oasis-Git/main",
       "lab_parent": "456b20d79f",
       "lab_commit": "39ed8ce0682bcb53b66b8ec2e1ccd42880e80106",
-      "integration_adjustments": "None; clean cherry-pick. Prefill only, when a request has more than 1024 query rows. Original request IDs remain stored for tail rebuilding; only DeepGEMM schedule grouping receives bounded pair IDs. Decode, verification and score tiling unchanged.",
+      "integration_adjustments": "The lab already has bounded row-pair IDs from PR41659. The original cherry-pick applied a second conversion and crashed on an 8K request by indexing a per-request array with pair IDs. Retain the existing _row_pair_ids implementation and pass its IDs through unchanged, including sliced tails. The standalone optimization is redundant on this lab stack. Decode, verification and score tiling remain unchanged.",
       "validation": {
         "isolated_gpu": "Nine exact-logit comparisons passed, including long/odd-length and empty-request segments, with distinct KV pages per request.",
         "metadata_16k_ms": {"before": 11.05952, "after_including_pair_ids": 0.452144},

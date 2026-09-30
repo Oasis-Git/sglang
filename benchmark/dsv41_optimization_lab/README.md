@@ -50,6 +50,12 @@ The combined TRT-LLM serving path has now completed the 8K prefill experiment
 below. This is a serving and kernel validation, not a model-quality evaluation.
 Earlier measurements of the four-PR stack are not results for this integration.
 
+The standalone sparse-indexer pairing optimization overlaps PR #41659: this lab
+already creates bounded row-pair IDs. Pass those IDs through unchanged; applying
+a second request-to-pair conversion indexes out of bounds on long prefills.
+The regression test `test_dsv41_sparse_pair_ids.py` covers long and odd request
+lengths, empty request segments, and sliced tails.
+
 ## Updating this branch
 
 Append scoped optimization commits and update the manifest with exact source
