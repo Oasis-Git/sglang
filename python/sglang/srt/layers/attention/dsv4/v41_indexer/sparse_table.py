@@ -4,6 +4,7 @@ a consumer scores only those blocks out of the index-K pool."""
 
 from __future__ import annotations
 
+from itertools import accumulate
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import msgspec
@@ -332,6 +333,24 @@ class SparseTableBackend:
         return buf[:rows]
 
 
+def _prefill_pair_ids(
+    request_ids: torch.Tensor, rows_per_request: List[int]
+) -> torch.Tensor:
+    # DeepGEMM pairs two adjacent rows within each request, but scans backwards
+    # to the run's start for every row. Bound each run to that same pair instead
+    # of making long prefills pay a quadratic scan. IDs only control pairing;
+    # the KV page table is indexed by query row, not by these IDs.
+    starts = torch.tensor(
+        list(accumulate([0] + rows_per_request[:-1])),
+        dtype=torch.int32,
+        device=request_ids.device,
+    )[request_ids]
+    rows = torch.arange(
+        request_ids.numel(), dtype=torch.int32, device=request_ids.device
+    )
+    return starts + (rows - starts) // 2
+
+
 def _build_prefill_table(
     *,
     blocks: torch.Tensor,
@@ -345,8 +364,16 @@ def _build_prefill_table(
 ) -> _SparsePrefillTable:
     # in place: ascending, INT32_MAX padded, plus the blocks as pool slots / 8
     phys_blocks = sort_candidate_blocks(blocks, compress_lens, page_table, page_size)
+    schedule_ids = request_ids
+    if max(rows_per_request, default=0) > 1024:
+        schedule_ids = _prefill_pair_ids(request_ids, rows_per_request)
     schedule = build_sparse_indexer_schedule(
-        blocks, compress_lens, page_table, page_size, q_dtype, request_ids
+        blocks,
+        compress_lens,
+        page_table,
+        page_size,
+        q_dtype,
+        schedule_ids,
     )
     ready = torch.cuda.Event()
     ready.record()

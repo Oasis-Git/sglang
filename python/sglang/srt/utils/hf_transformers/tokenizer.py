@@ -550,6 +550,21 @@ def get_tokenizer(
                     tokenizer_name, *args, **common_kwargs
                 )
 
+        if (
+            _fastokens_patched
+            and tokenizer_backend == "huggingface"
+            and isinstance(tokenizer, PreTrainedTokenizerFast)
+        ):
+            from tokenizers import Tokenizer
+
+            # fastokens patches Transformers globally. Honor explicit HF loads
+            # (e.g. Engram's vocabulary-dependent hash map) without unpatching
+            # other tokenizer instances or changing their backend.
+            if not isinstance(tokenizer.backend_tokenizer, Tokenizer):
+                tokenizer._tokenizer = Tokenizer.from_str(
+                    tokenizer.backend_tokenizer.to_str()
+                )
+
         return _apply_post_load_fixes(tokenizer, tokenizer_name, tokenizer_revision)
     except Exception as e:
         if tokenizer_backend == "fastokens":
