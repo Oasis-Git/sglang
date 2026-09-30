@@ -33,7 +33,7 @@ no SWA bounded replay. Default backend selection is unchanged.
 ## Tokenizer runtime option
 
 Install `fastokens==0.1.2` and append `--tokenizer-backend fastokens` to opt in.
-The standalone fix `81204764c2` forwards this choice through the DSv4.1 processor
+The standalone fix `c61e671f85` (based on `Oasis-Git/main`) forwards this choice through the DSv4.1 processor
 while preserving the explicit HuggingFace tokenizer used for Engram hashing.
 The manifest records exact-token and full Engram-map parity checks separately
 from full-model and combined-lab validation. Defaults are unchanged.
