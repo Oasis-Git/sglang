@@ -466,6 +466,8 @@ def _apply_wo_a_bf16_matmul(
 ) -> torch.Tensor | Mxfp8SwizzledInput | Fp8GridActivation | Mxfp8Activation:
     # o [T, G, D] @ wo_a [G, R, D] -> [T, G, R]; the fast paths below are gated
     # on the exact validated TP4 shapes and write token-major output directly.
+    # Small cached prefills also avoid the einsum layout copy; tiny rows retain
+    # their existing path.
     global _wo_a_aiter_batched_gemm_disabled
     # the gfx950 routes, like the CUDA ones, are V4.1's (fast_path); DSv4 keeps the
     # aiter batched GEMM / einsum below
@@ -495,7 +497,7 @@ def _apply_wo_a_bf16_matmul(
                 )
                 or (
                     is_prefill
-                    and 4096 <= o.shape[0] <= 65536
+                    and 9 <= o.shape[0] <= 65536
                     and get_platform().is_blackwell
                 )
             )
