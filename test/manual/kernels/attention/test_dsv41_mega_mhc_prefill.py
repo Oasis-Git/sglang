@@ -33,12 +33,45 @@ def check_shifted_mega_mhc_prefill(tokens):
     lo = (fn - hi.float() - mid.float()).bfloat16()
     parts = (hi, mid, lo)
     for _ in range(2):
-        expected_residual, expected_norm = mhc_post_combine_norm_prefill(
-            x, residual, post, comb, pre, weight, 1e-6
-        )
-        expected_stats = hc_mix_stats_sinkhorn_bf16x3(
-            expected_residual.flatten(1), parts, scale, base, 20, 1e-6, 1e-6
-        )
+        if tokens < 4096:
+            # The large-prefill fused reference rejects small row counts.
+            # Match the production small-prefill decomposition instead.
+            from flashinfer import rmsnorm
+
+            from sglang.kernels.ops.layernorm.mhc import (
+                hc_combine,
+                hc_mix_stats_sinkhorn_deepgemm,
+                mhc_post_tilelang,
+                split_tf32_hc_weight,
+            )
+            from sglang.kernels.ops.layernorm.mhc_post_split_h import mhc_post_split_h
+
+            if tokens <= 384:
+                expected_residual = mhc_post_split_h(x, residual, post, comb)
+            else:
+                expected_residual = torch.empty_like(residual)
+                mhc_post_tilelang(comb, residual, post, x, expected_residual, 4, hidden)
+            expected_norm = rmsnorm(
+                hc_combine(expected_residual.flatten(1), pre, 4, x.dtype),
+                weight,
+                1e-6,
+            )
+            expected_stats = hc_mix_stats_sinkhorn_deepgemm(
+                expected_residual.flatten(1),
+                split_tf32_hc_weight(fn),
+                scale,
+                base,
+                20,
+                1e-6,
+                1e-6,
+            )
+        else:
+            expected_residual, expected_norm = mhc_post_combine_norm_prefill(
+                x, residual, post, comb, pre, weight, 1e-6
+            )
+            expected_stats = hc_mix_stats_sinkhorn_bf16x3(
+                expected_residual.flatten(1), parts, scale, base, 20, 1e-6, 1e-6
+            )
         actual_residual, actual_norm, actual_stats = mhc_mega_boundary(
             x,
             residual,
@@ -71,6 +104,11 @@ def check_shifted_mega_mhc_prefill(tokens):
     "DeepGEMM Mega mHC requires Blackwell",
 )
 class TestShiftedMegaMhcPrefill(unittest.TestCase):
+    def test_small_cached_prefill(self):
+        for tokens in (128, 365, 511, 1115, 1325, 1760, 2048, 4095):
+            with self.subTest(tokens=tokens):
+                check_shifted_mega_mhc_prefill(tokens)
+
     def test_4k(self):
         check_shifted_mega_mhc_prefill(4096)
 

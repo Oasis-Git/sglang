@@ -3636,7 +3636,9 @@ class DeepseekV4DecoderLayer(nn.Module):
             and hidden_states.is_cuda
             and get_platform().is_blackwell
             and forward_batch.forward_mode.is_extend_without_speculative()
-            and 4096 <= hidden_states.shape[0] <= 65536
+            # Cached prefills often contain only hundreds of fresh tokens.
+            # Mega mHC preserves the same shifted boundary at these row counts.
+            and 128 <= hidden_states.shape[0] <= 65536
             and hidden_states.shape[1:] == (4, 5120)
             and hidden_states.dtype == torch.bfloat16
             and hidden_states.is_contiguous()
