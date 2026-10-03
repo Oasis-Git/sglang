@@ -1113,6 +1113,8 @@ class Envs:
     SGLANG_FLASHINFER_AUTOTUNE_CACHE = EnvBool(True)
     # Lab shim: preserve policy provenance for FlashInfer 0.7 tactic JSONs.
     SGLANG_FLASHINFER_POLICY_CACHE = EnvBool(False)
+    # Experimental BF16-preserving RMSNorm + MXFP8 epilogue for DSv4.1 prefill.
+    SGLANG_OPT_PREFILL_RMS_MXFP8 = EnvBool(False)
     # Also autotune one EXTEND-shaped dummy at max_prefill_tokens during
     # warmup. Opt-in: the extra forward needs transient activation headroom
     # that small-VRAM or tightly-packed configs may not have.

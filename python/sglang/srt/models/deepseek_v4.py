@@ -1285,19 +1285,33 @@ class MQALayer(MqaAttentionBase):
         return ok
 
     def _normalize_q_lora(
-        self, q: torch.Tensor
+        self, q: torch.Tensor, *, is_prefill: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor | Mxfp8SwizzledInput]:
         # The indexer needs the BF16 normalized row; wq_b needs the quantized one.
         if _is_hip:
             return _hip.q_norm_for_wq_b(self, q)
         method = self.wq_b.quant_method
+        fuse_prefill = (
+            is_prefill
+            and envs.SGLANG_OPT_PREFILL_RMS_MXFP8.get()
+            and not torch.compiler.is_compiling()
+            and not is_in_breakable_cuda_graph()
+            and not check_cuda_graph_backend(Phase.PREFILL, Backend.TC_PIECEWISE)
+            and not torch.cuda.is_current_stream_capturing()
+            and q.ndim == 2
+            and 8 < q.shape[0] <= 16384
+            and q.stride(0) % 8 == 0
+            and not self.q_norm.cast_x_before_out_mul
+            and self.q_norm.variance_size_override is None
+            and self.q_norm.weight.is_contiguous()
+        )
         if (
             _is_cuda
             and self.is_dsv41
             and get_platform().is_blackwell
             and q.dtype == self.q_norm.weight.dtype == torch.bfloat16
             and q.ndim == 2
-            and 0 < q.shape[0] <= 8
+            and (0 < q.shape[0] <= 8 or fuse_prefill)
             and q.shape[1] == 1280
             and q.stride(1) == 1
             and getattr(method, "mxfp8_dense_backend", None)
@@ -1314,7 +1328,14 @@ class MQALayer(MqaAttentionBase):
                 is_batch_invariant_mode_enabled()
                 or get_exec().deterministic.enable_deterministic_inference
             ):
-                from sglang.kernels.ops.layernorm.mxfp8_epilogue import rmsnorm_mxfp8
+                if fuse_prefill:
+                    from sglang.kernels.ops.layernorm.rmsnorm_mxfp8_prefill import (
+                        rmsnorm_mxfp8_prefill as rmsnorm_mxfp8,
+                    )
+                else:
+                    from sglang.kernels.ops.layernorm.mxfp8_epilogue import (
+                        rmsnorm_mxfp8,
+                    )
 
                 y, quant, scale = rmsnorm_mxfp8(
                     q, self.q_norm.weight, self.q_norm.variance_epsilon
@@ -1327,12 +1348,14 @@ class MQALayer(MqaAttentionBase):
         self,
         x: torch.Tensor,
         qkv_a: Optional[torch.Tensor] = None,
+        *,
+        is_prefill: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor | Mxfp8SwizzledInput]:
         if qkv_a is not None:
             q = qkv_a[..., : self.q_lora_rank]
         else:
             q, _ = self.wq_a(x)
-        return self._normalize_q_lora(q)
+        return self._normalize_q_lora(q, is_prefill=is_prefill)
 
     def _compute_q_b(
         self,
@@ -1490,7 +1513,11 @@ class MQALayer(MqaAttentionBase):
             qkv_a, _ = self.wqkv_a(x_linear)
             qkv_a_ready = current_stream.record_event()
 
-        q_lora, q_for_wqb = self._compute_q_a(x_linear, qkv_a=qkv_a)
+        q_lora, q_for_wqb = self._compute_q_a(
+            x_linear,
+            qkv_a=qkv_a,
+            is_prefill=forward_batch.forward_mode.is_extend_without_speculative(),
+        )
         q_lora_ready = current_stream.record_event()
 
         if self.indexer is not None:
@@ -1562,7 +1589,11 @@ class MQALayer(MqaAttentionBase):
                 )
 
         stream_kv.wait_stream(current_stream)
-        q_lora, q_for_wqb = self._compute_q_a(x_linear, qkv_a=qkv_a)
+        q_lora, q_for_wqb = self._compute_q_a(
+            x_linear,
+            qkv_a=qkv_a,
+            is_prefill=forward_batch.forward_mode.is_extend_without_speculative(),
+        )
         # NOTE: wait for the q_lora ready
         if self.indexer is not None:
             stream_sources.wait_stream(current_stream)
@@ -1779,7 +1810,10 @@ class MQALayer(MqaAttentionBase):
                 dtype=x.dtype,
             )
         else:
-            q_lora, q_for_wqb = self._normalize_q_lora(q_lora)
+            q_lora, q_for_wqb = self._normalize_q_lora(
+                q_lora,
+                is_prefill=forward_batch.forward_mode.is_extend_without_speculative(),
+            )
             q = self._compute_q_b(q_for_wqb, positions, q_out)
             self._compute_kv_to_cache(
                 x_linear, positions, forward_batch, attn_backend, qkv_a=qkv_a
@@ -1883,7 +1917,10 @@ class MQALayer(MqaAttentionBase):
                 )
                 q, _ = self.wq_b(q_for_wqb)
             else:
-                q_lora, q_for_wqb = self._normalize_q_lora(q_lora)
+                q_lora, q_for_wqb = self._normalize_q_lora(
+                    q_lora,
+                    is_prefill=forward_batch.forward_mode.is_extend_without_speculative(),
+                )
                 q, _ = self.wq_b(q_for_wqb)
 
             kv = (
@@ -2036,7 +2073,10 @@ class MQALayer(MqaAttentionBase):
             if q_out is not None:
                 q_out.copy_(q)
         else:
-            q_lora, q_for_wqb = self._normalize_q_lora(q_lora)
+            q_lora, q_for_wqb = self._normalize_q_lora(
+                q_lora,
+                is_prefill=forward_batch.forward_mode.is_extend_without_speculative(),
+            )
             if _is_hip:
                 q, q_lora, fuse_q_rope = _hip.compute_q_b(
                     self, q_lora, q_for_wqb, positions, q_out, unified, use_cp
