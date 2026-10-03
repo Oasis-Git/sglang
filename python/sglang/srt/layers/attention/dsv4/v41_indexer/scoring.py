@@ -13,6 +13,7 @@ import torch
 from sglang.kernels.ops.attention.dsv4.fp4_indexer import fp4_index_logits_decode
 from sglang.kernels.ops.attention.dsv4.fp4_indexer_rope import index_q_rope_pack_weights
 from sglang.kernels.ops.attention.dsv4.index_logits import flat_index_logits_tiles
+from sglang.srt.environ import envs
 from sglang.srt.utils.common import async_h2d
 
 from .types import DecodeInputs, PrefillInputs
@@ -45,6 +46,7 @@ class DeepGEMMPrefillData(msgspec.Struct, frozen=True):
     q_fp4: torch.Tensor  # [rows, heads, 64] int8, packed fp4
     q_sf: torch.Tensor  # [rows, heads] int32, packed ue8m0
     weights: torch.Tensor  # [rows, heads] fp32 head weights
+    row_pair_ids: Optional[torch.Tensor] = None
 
     @property
     def num_rows(self) -> int:
@@ -167,6 +169,39 @@ def get_deep_gemm_prefill_data(
     num_tokens = pos.shape[0]
     if columns == 0 or num_tokens == 0:
         return None
+    if envs.SGLANG_OPT_DSV41_PREFILL_INDEX_METADATA.get():
+        from sglang.kernels.ops.attention.dsv4.indexer_prefill_metadata import (
+            build_indexer_prefill_metadata,
+        )
+
+        k_slots, request_starts, compress_lens, row_pair_ids = (
+            build_indexer_prefill_metadata(
+                req_to_token,
+                inputs.req_pool_indices,
+                pos,
+                lens_per_request,
+                inputs.rows_per_request,
+                ratio,
+            )
+        )
+        q_fp4, q_sf, weights = _index_q_and_weights(
+            indexer=inputs.indexer,
+            x=inputs.x,
+            q_lora=inputs.q_lora,
+            freqs_cis=inputs.freqs_cis,
+            positions=pos,
+        )
+        return DeepGEMMPrefillData(
+            k_slots=k_slots,
+            request_starts=request_starts,
+            lens_per_request=lens_per_request,
+            rows_per_request=inputs.rows_per_request,
+            compress_lens=compress_lens,
+            q_fp4=q_fp4,
+            q_sf=q_sf,
+            weights=weights,
+            row_pair_ids=row_pair_ids,
+        )
     starts = list(itertools.accumulate(lens_per_request, initial=0))[:-1]
     lens = async_h2d(lens_per_request, dtype=torch.int64, device=device)
     starts_dev = async_h2d(starts, dtype=torch.int64, device=device)

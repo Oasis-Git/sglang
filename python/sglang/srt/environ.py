@@ -1115,6 +1115,8 @@ class Envs:
     SGLANG_FLASHINFER_POLICY_CACHE = EnvBool(False)
     # Experimental BF16-preserving RMSNorm + MXFP8 epilogue for DSv4.1 prefill.
     SGLANG_OPT_PREFILL_RMS_MXFP8 = EnvBool(False)
+    # Fuse eager prefill indexer slot/offset preparation without cross-forward caching.
+    SGLANG_OPT_DSV41_PREFILL_INDEX_METADATA = EnvBool(False)
     # Also autotune one EXTEND-shaped dummy at max_prefill_tokens during
     # warmup. Opt-in: the extra forward needs transient activation headroom
     # that small-VRAM or tightly-packed configs may not have.

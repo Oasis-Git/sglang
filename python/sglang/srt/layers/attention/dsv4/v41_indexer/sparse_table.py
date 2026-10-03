@@ -431,7 +431,11 @@ def publish_prefill_table(
         compress_lens=data.compress_lens,
         page_table=index_page_table,
         page_size=index_page_size,
-        request_ids=_row_pair_ids(data.rows_per_request, device=device),
+        request_ids=(
+            data.row_pair_ids
+            if data.row_pair_ids is not None
+            else _row_pair_ids(data.rows_per_request, device=device)
+        ),
         rows_per_request=data.rows_per_request,
         q_dtype=data.q_fp4.dtype,
         valid_lens=valid_lens,
