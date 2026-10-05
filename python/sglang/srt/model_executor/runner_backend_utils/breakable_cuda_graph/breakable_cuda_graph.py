@@ -240,10 +240,17 @@ def eager_on_graph(enable: bool, capture_stub: Optional[Callable] = None):
             # addresses recorded. A capture_stub replaces the body during
             # capture (contents are never consumed; warmup and replay run
             # the real inner), letting rank-coupled bodies skip the work.
-            if capture_stub is not None:
-                output = capture_stub(*args, **kwargs)
-            else:
-                output = inner(*args, **kwargs)
+            # The whole body is eager, including any nested eager_on_graph
+            # decorators (notably the debug-eager wrapper around a model).
+            # A nested wrapper must not end the already-closed segment.
+            token = _current_capture_var.set(None)
+            try:
+                if capture_stub is not None:
+                    output = capture_stub(*args, **kwargs)
+                else:
+                    output = inner(*args, **kwargs)
+            finally:
+                _current_capture_var.reset(token)
 
             # Weak-ref captured inputs produced by graph segments. Their storage
             # is pinned by the segment CUDAGraphs' mempool use-count, so Python

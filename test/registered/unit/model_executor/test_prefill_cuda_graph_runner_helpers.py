@@ -55,6 +55,72 @@ def _make_pp_buffers_and_registry():
 
 
 class TestPrefillCudaGraphRunnerHelpers(CustomTestCase):
+    def test_debug_body_uses_live_batch_instead_of_capture_closure(self):
+        runner = PrefillCudaGraphRunner.__new__(PrefillCudaGraphRunner)
+        runner._is_full_backend = False
+        runner.buffer_registry = SimpleNamespace(has_slot=lambda _: False)
+        sentinel = object()
+        live = SimpleNamespace(mm_input_embeds=None)
+        static = SimpleNamespace(input_ids=object(), positions=object())
+        embeds = object()
+
+        def original(ids, positions, batch, input_embeds=None):
+            self.assertIs(ids, static.input_ids)
+            self.assertIs(positions, static.positions)
+            self.assertIs(batch, static)
+            self.assertIs(input_embeds, embeds)
+            return sentinel
+
+        layer = SimpleNamespace(forward=original)
+        runner.layer_model = layer
+        runner.backend = SimpleNamespace(_debug_eager=True)
+        runner.model_runner = SimpleNamespace(
+            pp_group=SimpleNamespace(is_first_rank=False),
+            model=SimpleNamespace(
+                forward=lambda ids, pos, batch: layer.forward(
+                    ids, pos, batch, input_embeds=embeds
+                )
+            ),
+        )
+        runner._prefill_forward_context = lambda *a, **k: nullcontext()
+        self.assertIs(
+            runner._execute_body_capture(live, static, 224, 219, None), sentinel
+        )
+        self.assertIs(layer.forward, original)
+
+    def test_debug_body_replay_calls_original_forward_and_restores_on_error(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail):
+                runner = PrefillCudaGraphRunner.__new__(PrefillCudaGraphRunner)
+                runner._is_full_backend = False
+                runner.buffer_registry = SimpleNamespace(has_slot=lambda _: False)
+                sentinel = object()
+
+                def original(*args, **kwargs):
+                    if fail:
+                        raise ValueError("body failed")
+                    return sentinel
+
+                layer = SimpleNamespace(forward=original)
+                runner.layer_model = layer
+                runner.backend = SimpleNamespace(replay=lambda *a, **k: layer.forward())
+                runner.model_runner = SimpleNamespace(
+                    pp_group=SimpleNamespace(is_first_rank=False),
+                    model=SimpleNamespace(forward=lambda *a, **k: layer.forward()),
+                )
+                runner._prefill_forward_context = lambda *a, **k: nullcontext()
+                batch = SimpleNamespace(
+                    input_ids=None, positions=None, mm_input_embeds=None
+                )
+                if fail:
+                    with self.assertRaisesRegex(ValueError, "body failed"):
+                        runner._execute_body_capture(batch, batch, 1, 1, None)
+                else:
+                    self.assertIs(
+                        runner._execute_body_capture(batch, batch, 1, 1, None), sentinel
+                    )
+                self.assertIs(layer.forward, original)
+
     def test_dspark_proxy_width_requires_receiving_stage_and_model_support(self):
         class Model:
             def get_pp_proxy_dspark_hidden_size(self):

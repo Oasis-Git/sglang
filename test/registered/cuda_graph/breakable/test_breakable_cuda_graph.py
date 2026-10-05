@@ -87,6 +87,34 @@ class TestBreakableCUDAGraphBasic(CustomTestCase):
         # x=10 -> intermediate=11 -> eager: 11*2=22 -> y=22+3=25
         self.assertTrue(torch.allclose(y, torch.full((4,), 25.0, device=self.device)))
 
+    def test_nested_eager_break(self):
+        """An outer debug-eager region includes its nested breaks eagerly."""
+        x = torch.zeros(4, device=self.device)
+        y = torch.zeros_like(x)
+        calls = []
+
+        @self.eager_on_graph(enable=True)
+        def inner(src):
+            calls.append("inner")
+            return src * 2.0
+
+        @self.eager_on_graph(enable=True)
+        def outer(src):
+            calls.append("outer")
+            return inner(src + 1.0) + 3.0
+
+        graph = self.BreakableCUDAGraph()
+        stream = torch.cuda.Stream(self.device)
+        with self.BreakableCUDAGraphCapture(graph, stream=stream):
+            y.copy_(outer(x))
+        self.assertEqual(len(graph._break_fns), 1)
+        for value in (5.0, 9.0):
+            x.fill_(value)
+            graph.replay()
+            torch.cuda.synchronize()
+            self.assertTrue(torch.equal(y, torch.full_like(y, 2 * value + 5)))
+        self.assertEqual(calls, ["outer", "inner"] * 3)
+
     def test_multiple_breaks(self):
         """Multiple graph breaks should produce correct chained results."""
         x = torch.zeros(4, device=self.device)

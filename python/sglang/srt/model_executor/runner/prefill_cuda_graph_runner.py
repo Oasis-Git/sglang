@@ -2023,7 +2023,20 @@ class PrefillCudaGraphRunner(BaseCudaGraphRunner):
                 and self.buffer_registry.has_slot("input_embeds")
             ):
                 self._fill_input_embeds_slot(args, layer_kwargs, static_num_tokens)
-            hs = self.backend.replay(shape_key, static_forward_batch, **kwargs)
+            # Debug-eager BCG re-enters _run_forward instead of replaying the
+            # captured transformer kernels. Let it call the real body rather
+            # than recursively entering this temporary replay wrapper.
+            self.layer_model.forward = original_layer_forward
+            try:
+                if getattr(self.backend, "_debug_eager", False):
+                    # The captured Python closure retains the dummy capture
+                    # ForwardBatch. Run the real body with the outer wrapper's
+                    # live padded batch, embeddings, and prefill context.
+                    hs = original_layer_forward(*args, **layer_kwargs)
+                else:
+                    hs = self.backend.replay(shape_key, static_forward_batch, **kwargs)
+            finally:
+                self.layer_model.forward = replay_layer_forward
             return _slice_output_rows(hs, raw_num_tokens) if full_path else hs
 
         original_layer_forward = self.layer_model.forward
