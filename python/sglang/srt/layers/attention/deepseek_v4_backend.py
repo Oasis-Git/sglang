@@ -1524,7 +1524,30 @@ class DeepseekV4AttnBackend(
 
     @property
     def low_ratio_prefill_graph(self) -> bool:
-        return bool(self.low_ratios) and has_dense_fp4_indexer() and is_sm100_or_newer()
+        if not (self.low_ratios and has_dense_fp4_indexer() and is_sm100_or_newer()):
+            return False
+
+        cfg = self.model_runner.model_config.hf_text_config
+        if getattr(cfg, "candidate_source_layer_id", -1) < 0:
+            return True
+
+        from sglang.srt.runtime_context import get_exec
+
+        prefill = get_exec().graph.cuda_graph_config.prefill
+        context_width = min(
+            prefill.max_context_size or self.MAX_SEQ_LEN_FOR_CAPTURE,
+            self.MAX_SEQ_LEN_FOR_CAPTURE,
+        )
+        # The captured full top-k is equivalent to candidate selection only
+        # while every compressed block fits in the candidate window. Beyond
+        # that window, retain the existing eager BCG break for the compressor
+        # and indexer; the rest of the model can still replay captured graphs.
+        page_count = (context_width + self.page_size - 1) // self.page_size
+        if prefill.max_seq_len is not None:
+            page_count = min(page_count, prefill.max_seq_len // self.page_size)
+        compressed_width = page_count * self.page_size // min(self.low_ratios)
+        candidate_window = cfg.candidate_topk_blocks * cfg.candidate_block_size
+        return compressed_width <= candidate_window
 
     def can_run_prefill_cuda_graph(self, forward_batch: ForwardBatch) -> bool:
         max_seq_len = _prefill_graph_max_seq_len()
@@ -2931,6 +2954,11 @@ class DeepseekV4AttnBackend(
 
         pool = self.token_to_kv_pool
         core = self.forward_metadata.core_metadata
+        # An eager BCG break slices activations to live rows, while attention
+        # metadata retains the padded capture bucket. Fused kernels and the
+        # subsequent index-K store must see the same live-row count.
+        num_tokens = x.shape[0]
+        raw_out_loc = core.raw_out_loc[:num_tokens]
         compressor = layer.compressor
         layer_id = layer.layer_id
         # Contiguous complex64 freqs_cis gives a real/imag-interleaved view without copying.
@@ -2951,14 +2979,14 @@ class DeepseekV4AttnBackend(
                 compressor.wkv(x),
                 compressor.norm.weight.data,
                 pos,
-                core.raw_out_loc,
+                raw_out_loc,
                 compressor.norm.eps,
                 freqs_cis,
                 kv_cache,
                 page_size=page_size,
                 layout=kv_layout,
             )
-            out_loc = core.c1_out_loc
+            out_loc = core.c1_out_loc[:num_tokens]
         else:
             # CompressStatePool stores each request's pending pairs in a position ring.
             # KVAndScore rows use | kv | score |, addressed as req * ring_size + pos % ring_size.
@@ -2969,7 +2997,7 @@ class DeepseekV4AttnBackend(
                 compressor.norm.weight.data,
                 pos,
                 req,
-                core.raw_out_loc,
+                raw_out_loc,
                 compressor.norm.eps,
                 freqs_cis,
                 kv_cache,
@@ -2990,7 +3018,7 @@ class DeepseekV4AttnBackend(
                     ring_size=state.ring_size,
                     layout=kv_layout,
                 )
-            out_loc = core.c2_out_loc
+            out_loc = core.c2_out_loc[:num_tokens]
 
         indexer = layer.indexer
         if indexer is not None and indexer.owns_k:

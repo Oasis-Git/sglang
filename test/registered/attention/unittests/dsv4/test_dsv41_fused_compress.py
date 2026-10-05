@@ -290,9 +290,9 @@ class TestFusedLowRatioCompress(CustomTestCase):
         override.install()
         cls.addClassCleanup(override.restore)
 
-    def _check_step(self, t, ratio: int):
+    def _check_step(self, t, ratio: int, **kwargs):
         DeepseekV4AttnBackend._low_ratio_compress_fused(
-            t.backend, t.layer, t.x, t.req, t.pos
+            t.backend, t.layer, t.x, t.req, t.pos, **kwargs
         )
         ref_kv, ref_index = _reference(t, ratio)
         torch.cuda.synchronize()
@@ -313,6 +313,24 @@ class TestFusedLowRatioCompress(CustomTestCase):
                 f"{ratio=}: {int((got != ref).sum())} index-K "
                 f"cache bytes differ from the unfused chain",
             )
+
+    def test_eager_break_with_padded_bucket_metadata(self):
+        n, bucket = 219, 224
+        for ratio in (1, 2):
+            with self.subTest(ratio=ratio):
+                t = _build(n, ratio, seed=500 + ratio)
+                core = t.backend.forward_metadata.core_metadata
+                for name in ("raw_out_loc", "c1_out_loc", "c2_out_loc"):
+                    value = getattr(core, name)
+                    padded = F.pad(value, (0, bucket - n))
+                    setattr(core, name, padded)
+                kwargs = {}
+                if ratio == 2:
+                    kwargs["extend_offsets"] = (
+                        torch.arange(n, dtype=torch.int32, device="cuda"),
+                        torch.ones(n, dtype=torch.int32, device="cuda"),
+                    )
+                self._check_step(t, ratio, **kwargs)
 
     def test_matches_the_unfused_chain(self):
         for ratio in (1, 2):
