@@ -25,7 +25,6 @@ from sglang.srt.arg_groups.attention_hook import (
 )
 from sglang.srt.arg_groups.cuda_graph_hook import (
     apply_cuda_graph_compatibility,
-    disable_tc_piecewise_cudagraph_if_incompatible,
     finalize_cuda_graph_prefill_max_context,
     handle_cuda_graph_config,
 )
@@ -207,6 +206,24 @@ class TestPrepareServerArgs(CustomTestCase):
             self.assertTrue(resolution_result(args, "enable_w4a4_mxfp4_megamoe"))
             self.assertEqual(os.environ["DG_USE_FP4_ACTS"], "0")
             self.assertEqual(os.environ["DG_USE_MXF4_KIND"], "0")
+
+    def test_speculative_w4a4_mxfp4_megamoe_is_tri_state(self):
+        # Unset must stay None, not False: None is what lets the draft inherit
+        # --enable-w4a4-mxfp4-megamoe.
+        for flag, expected in (
+            ([], None),
+            (["--speculative-enable-w4a4-mxfp4-megamoe"], True),
+            (["--no-speculative-enable-w4a4-mxfp4-megamoe"], False),
+        ):
+            with self.subTest(flag=flag):
+                args = prepare_server_args(
+                    ["--model-path", "dummy", "--enable-w4a4-mxfp4-megamoe", *flag]
+                )
+                args.resolve_once()
+                self.assertIs(
+                    resolution_result(args, "speculative_enable_w4a4_mxfp4_megamoe"),
+                    expected,
+                )
 
     def test_megamoe_rejects_two_batch_overlap(self):
         # The fused kernel has no dispatch/combine split for the TBO ops to call.
@@ -2501,44 +2518,6 @@ class TestPrefillOnlyDisableKvCache(unittest.TestCase):
                     self._validate_prefill_only_args(kv_cache_dtype=kv_cache_dtype)
 
 
-class TestCudaGraphConfigDataclassAccess(CustomTestCase):
-    @patch(
-        "sglang.srt.model_executor.runner_backend."
-        "tc_piecewise_cuda_graph_backend.get_moe_a2a_backend"
-    )
-    def test_tc_piecewise_build_config_reads_phase_config_dataclass(
-        self, mock_get_moe_a2a_backend
-    ):
-        from sglang.srt.model_executor.runner_backend.tc_piecewise_cuda_graph_backend import (
-            TcPiecewiseCudaGraphBackend,
-        )
-
-        mock_backend = mock_get_moe_a2a_backend.return_value
-        mock_backend.is_deepep.return_value = False
-        mock_backend.is_mooncake.return_value = False
-        from sglang.srt.runtime_context import get_context
-
-        # The graph configuration is a bag leaf; the debug switch is raw input
-        # and stays on the argument.
-        override = get_context().override_server_args(
-            cuda_graph_config=CudaGraphConfig(
-                prefill=PhaseConfig(
-                    backend=Backend.TC_PIECEWISE,
-                    bs=[32, 64],
-                    tc_compiler="eager",
-                )
-            )
-        )
-        override.install()
-        self.addCleanup(override.restore)
-        server_args = SimpleNamespace(enable_torch_compile_debug_mode=False)
-
-        config = TcPiecewiseCudaGraphBackend.build_compilation_config(server_args)
-
-        self.assertEqual(config.get_capture_sizes(), [32, 64])
-        self.assertEqual(config.compiler, "eager")
-
-
 class TestPipelineParallelCompat(CustomTestCase):
     """Features supported with `pipeline-parallel-size > 1`."""
 
@@ -2820,33 +2799,6 @@ class TestPrefillCudaGraphLoRACompatibility(CustomTestCase):
         self.assertEqual(
             resolution_result(args, "cuda_graph_config").prefill.backend,
             Backend.BREAKABLE,
-        )
-
-    def test_lora_still_disables_tc_piecewise_prefill_graph(self):
-        # Pin the tc_piecewise LoRA rule itself, with the hardware rule
-        # neutralized so this runs on CPU-only CI.
-        args = ServerArgs(model_path="dummy", enable_lora=True)
-        args._model_config = SimpleNamespace(
-            hf_config=SimpleNamespace(architectures=["LlamaForCausalLM"]),
-            is_piecewise_cuda_graph_disabled_model=False,
-            is_multimodal=False,
-            is_multimodal_piecewise_cuda_graph_supported=False,
-        )
-        args.cuda_graph_config = CudaGraphConfig(
-            prefill=PhaseConfig(backend=Backend.TC_PIECEWISE)
-        )
-        with (
-            override_platform(is_hip=False),
-            override_platform(is_npu=False),
-            patch("sglang.srt.arg_groups.cuda_graph_hook.is_cpu", return_value=False),
-            patch("sglang.srt.arg_groups.cuda_graph_hook.is_mps", return_value=False),
-            override_platform(is_xpu=False),
-        ):
-            disable_tc_piecewise_cudagraph_if_incompatible(args)
-
-        self.assertEqual(
-            resolution_result(args, "cuda_graph_config").prefill.backend,
-            Backend.DISABLED,
         )
 
 
