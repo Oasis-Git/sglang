@@ -106,6 +106,7 @@ class TestDSV41FlashDP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
         "4",
         "--ep-size",
         "4",
+        "--enable-dp-lm-head",
         "--moe-a2a-backend",
         "deepep",
         "--deepep-config",
