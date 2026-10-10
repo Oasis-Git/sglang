@@ -1,6 +1,6 @@
 """DeepSeek-V4.1-Flash accuracy with DSPARK on four B200 GPUs.
 
-Run GSM8K and MMLU in TP4 and DP-attention4 + EP4 configurations.
+Run GSM8K and MMLU in TP4+EP4 and DP-attention4 + EP4 configurations.
 The DP+EP recipe is intentionally exercised rather than skipped: startup or
 accuracy failures must be visible in CI while this path is being validated.
 """
@@ -92,10 +92,10 @@ class DSV41FlashAccuracyMixin(GSM8KMixin, MMLUMixin):
         self.assert_dspark_accepts_draft_tokens()
 
 
-class TestDSV41FlashTP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
-    """Tensor-parallel attention and experts, without DP attention."""
+class TestDSV41FlashTP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
+    """Tensor-parallel attention and expert-parallel MoE, without DP attention."""
 
-    parallel_args = ["--attn-dp-size", "1", "--ep-size", "1"]
+    parallel_args = ["--attn-dp-size", "1", "--ep-size", "4"]
 
 
 class TestDSV41FlashDP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
