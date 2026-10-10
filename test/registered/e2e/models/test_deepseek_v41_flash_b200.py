@@ -1,0 +1,116 @@
+"""DeepSeek-V4.1-Flash accuracy with DSPARK on four B200 GPUs.
+
+Run GSM8K and MMLU in TP4 and DP-attention4 + EP4 (DeepEP) configurations.
+The DP+EP recipe is intentionally exercised rather than skipped: startup or
+accuracy failures must be visible in CI while this path is being validated.
+"""
+
+import unittest
+
+import requests
+
+from sglang.srt.utils import kill_process_tree
+from sglang.test.ci.ci_register import register_cuda_ci
+from sglang.test.kits.eval_accuracy_kit import GSM8KMixin, MMLUMixin
+from sglang.test.test_utils import (
+    DEFAULT_URL_FOR_TEST,
+    CustomTestCase,
+    popen_launch_server,
+    try_cached_model,
+)
+
+register_cuda_ci(est_time=1800, stage="extra-b", runner_config="4-gpu-b200")
+
+MODEL = "deepseek-ai/DeepSeek-V4.1-Flash"
+
+
+class DSV41FlashAccuracyMixin(GSM8KMixin, MMLUMixin):
+    # Initial regression floors, not measured B200 baselines. Calibrate against
+    # the first GPU CI runs for both parallel configurations.
+    gsm8k_score_threshold = 0.85
+    gsm8k_num_examples = 200
+    gsm8k_num_threads = 64
+    mmlu_score_threshold = 0.75
+    mmlu_num_examples = 500
+    mmlu_num_threads = 64
+
+    parallel_args = []
+    server_env = {}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = try_cached_model(MODEL)
+        cls.base_url = DEFAULT_URL_FOR_TEST
+        cls.process = popen_launch_server(
+            cls.model,
+            cls.base_url,
+            timeout=3600,
+            other_args=[
+                "--trust-remote-code",
+                "--tp",
+                "4",
+                "--speculative-algorithm",
+                "DSPARK",
+                "--speculative-dspark-block-size",
+                "5",
+                "--mem-fraction-static",
+                "0.8",
+                "--cuda-graph-max-bs-decode",
+                "64",
+                "--max-running-requests",
+                "64",
+                "--reasoning-parser",
+                "auto",
+                "--tool-call-parser",
+                "auto",
+                *cls.parallel_args,
+            ],
+            env=cls.server_env,
+        )
+        cls.addClassCleanup(kill_process_tree, cls.process.pid)
+
+    def assert_dspark_accepts_draft_tokens(self):
+        response = requests.get(self.base_url + "/server_info", timeout=30)
+        response.raise_for_status()
+        states = response.json()["internal_states"]
+        self.assertTrue(states, "Missing scheduler statistics")
+        accept_lengths = [state["avg_spec_accept_length"] for state in states]
+        self.assertGreater(
+            max(accept_lengths),
+            1.0,
+            f"DSPARK accepted no draft tokens: {accept_lengths}",
+        )
+
+    def test_gsm8k(self):
+        super().test_gsm8k()
+        self.assert_dspark_accepts_draft_tokens()
+
+    def test_mmlu(self):
+        super().test_mmlu()
+        self.assert_dspark_accepts_draft_tokens()
+
+
+class TestDSV41FlashTP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
+    """Tensor-parallel attention and experts, without DP attention."""
+
+    parallel_args = ["--attn-dp-size", "1", "--ep-size", "1"]
+
+
+class TestDSV41FlashDP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
+    """Data-parallel attention and expert-parallel MoE using DeepEP."""
+
+    parallel_args = [
+        "--attn-dp-size",
+        "4",
+        "--ep-size",
+        "4",
+        "--moe-a2a-backend",
+        "deepep",
+        "--deepep-config",
+        '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}',
+    ]
+    server_env = {"SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK": "1024"}
+
+
+if __name__ == "__main__":
+    unittest.main()
