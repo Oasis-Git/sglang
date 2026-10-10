@@ -27,6 +27,8 @@ MODEL = "deepseek-ai/DeepSeek-V4.1-Flash"
 class DSV41FlashAccuracyMixin(GSM8KMixin, MMLUMixin):
     # Initial regression floors, not measured B200 baselines. Calibrate against
     # the first GPU CI runs for both parallel configurations.
+    # Use the zero-shot chat evaluator, not the legacy five-shot completion path.
+    gsm8k_backend = "sgl_eval"
     gsm8k_score_threshold = 0.85
     gsm8k_num_examples = 200
     gsm8k_num_threads = 64
