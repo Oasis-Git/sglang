@@ -175,7 +175,7 @@ class GSM8KMixin:
     gsm8k_num_shots: int = 5  # run_eval backend only
     gsm8k_backend: str = "run_eval"  # "run_eval" | "sgl_eval"
     gsm8k_thinking: bool = False  # sgl_eval backend
-    gsm8k_max_tokens: Optional[int] = None  # sgl_eval backend
+    gsm8k_max_tokens: Optional[int] = None
     # None keeps run_eval's greedy default; set both to route the run through
     # the sampling path.
     gsm8k_temperature: Optional[float] = None
@@ -211,7 +211,11 @@ class GSM8KMixin:
                 num_threads=self.gsm8k_num_threads,
                 accept_length_thres=self.gsm8k_accept_length_thres,
                 api="completion",
-                max_tokens=512,
+                max_tokens=(
+                    self.gsm8k_max_tokens
+                    if self.gsm8k_max_tokens is not None
+                    else 512
+                ),
                 num_shots=self.gsm8k_num_shots,
                 temperature=self.gsm8k_temperature,
                 top_p=self.gsm8k_top_p,
@@ -219,12 +223,13 @@ class GSM8KMixin:
 
 
 class MMLUMixin:
-    """Mixin for MMLU evaluation via sgl-eval (2048-token cap, no thinking)."""
+    """Mixin for MMLU evaluation via sgl-eval (2048 tokens by default, no thinking)."""
 
     mmlu_score_threshold: float = _THRESHOLD_NOT_SET
     mmlu_accept_length_thres: Optional[float] = None
     mmlu_num_examples: int = 5000
     mmlu_num_threads: int = 1024
+    mmlu_max_tokens: Optional[int] = None
 
     def test_mmlu(self):
         _run_accuracy_eval(
@@ -233,6 +238,7 @@ class MMLUMixin:
             score_threshold=self.mmlu_score_threshold,
             num_examples=self.mmlu_num_examples,
             num_threads=self.mmlu_num_threads,
+            max_tokens=self.mmlu_max_tokens,
             accept_length_thres=self.mmlu_accept_length_thres,
         )
 
