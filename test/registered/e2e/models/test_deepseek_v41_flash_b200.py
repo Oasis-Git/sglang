@@ -1,6 +1,6 @@
 """DeepSeek-V4.1-Flash accuracy with DSPARK on four B200 GPUs.
 
-Run GSM8K and MMLU in TP4 and DP-attention4 + EP4 (DeepEP) configurations.
+Run GSM8K and MMLU in TP4 and DP-attention4 + EP4 configurations.
 The DP+EP recipe is intentionally exercised rather than skipped: startup or
 accuracy failures must be visible in CI while this path is being validated.
 """
@@ -99,7 +99,10 @@ class TestDSV41FlashTP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
 
 
 class TestDSV41FlashDP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
-    """Data-parallel attention and expert-parallel MoE using DeepEP."""
+    """DP attention and EP MoE using the built-in gather/reduce path.
+
+    DSPARK with DP attention does not support the DeepEP backend.
+    """
 
     parallel_args = [
         "--attn-dp-size",
@@ -108,11 +111,8 @@ class TestDSV41FlashDP4EP4DSpark(DSV41FlashAccuracyMixin, CustomTestCase):
         "4",
         "--enable-dp-lm-head",
         "--moe-a2a-backend",
-        "deepep",
-        "--deepep-config",
-        '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}',
+        "none",
     ]
-    server_env = {"SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK": "1024"}
 
 
 if __name__ == "__main__":
